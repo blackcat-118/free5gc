@@ -19,6 +19,7 @@ require (
 	github.com/free5gc/pcf v0.0.0
 	github.com/free5gc/sctp v1.0.1
 	github.com/free5gc/smf v1.2.4
+	github.com/free5gc/tngf v0.0.0-20240822033849-abfb192aa9b1
 	github.com/free5gc/udm v0.0.0
 	github.com/free5gc/udr v0.0.0
 	github.com/free5gc/util v1.0.7-0.20240423011541-6c6d53b385d5
@@ -95,7 +96,7 @@ require (
 	github.com/modern-go/concurrent v0.0.0-20180306012644-bacd9c7ef1dd // indirect
 	github.com/modern-go/reflect2 v1.0.2 // indirect
 	github.com/montanaflynn/stats v0.0.0-20171201202039-1bf9dbcd8cbe // indirect
-	github.com/pelletier/go-toml/v2 v2.2.1 // indirect
+	github.com/pelletier/go-toml/v2 v2.2.2 // indirect
 	github.com/pkg/errors v0.9.1 // indirect
 	github.com/pkg/sftp v1.13.5 // indirect
 	github.com/pmezard/go-difflib v1.0.0 // indirect

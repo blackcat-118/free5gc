@@ -2,6 +2,7 @@ package test
 
 import (
 	"encoding/binary"
+	"encoding/hex"
 	"errors"
 	"fmt"
 	"hash"
@@ -44,11 +45,7 @@ var (
 	tngfueInnerAddr                = new(net.IPNet)
 )
 
-type TNGFUe struct {
-	context.TNGFUe
-}
-
-func tngfgenerateSPI(tngfue *TNGFUe) []byte {
+func tngfgenerateSPI(tngfue *context.TNGFUe) []byte {
 	var spi uint32
 	spiByte := make([]byte, 4)
 	for {
@@ -655,7 +652,7 @@ func tngfapplyXFRMRule(ue_is_initiator bool, ifId uint32, childSecurityAssociati
 func tngfsendPduSessionEstablishmentRequest(
 	pduSessionId uint8,
 	ue *RanUeContext,
-	n3Info *TNGFUe,
+	n3Info *context.TNGFUe,
 	ikeSA *context.IKESecurityAssociation,
 	ikeConn *net.UDPConn,
 	nasConn *net.TCPConn,
@@ -913,11 +910,15 @@ func TestTngfUE(t *testing.T) {
 	}
 
 	// Used to save IPsec/IKE related data
-	tngfue := new(TNGFUe)
+	tngfue := context.TNGFSelf().NewTngfUe()
 	tngfue.PduSessionList = make(map[int64]*context.PDUSession)
 	tngfue.TNGFChildSecurityAssociation = make(map[uint32]*context.ChildSecurityAssociation)
 	tngfue.TemporaryExchangeMsgIDChildSAMapping = make(map[uint32]*context.ChildSecurityAssociation)
 
+	tngfRadiusUDPAddr, err := net.ResolveUDPAddr("udp", tngfInfo_IPSecIfaceAddr+":1812")
+	if err != nil {
+		t.Fatalf("Resolve UDP address %s fail: %+v", tngfInfo_IPSecIfaceAddr+":1812", err)
+	}
 	tngfUDPAddr, err := net.ResolveUDPAddr("udp", tngfInfo_IPSecIfaceAddr+":500")
 	if err != nil {
 		t.Fatalf("Resolve UDP address %s fail: %+v", tngfInfo_IPSecIfaceAddr+":500", err)
@@ -928,6 +929,19 @@ func TestTngfUE(t *testing.T) {
 		t.Fatalf("Setup UDP socket Fail: %+v", err)
 	}
 
+	// AAA
+	// Captured packet binary content as a hexadecimal string
+	hexString := "010500d4ea408c3a615fc82899bb8f2fa2e374e90108746e676675650406c0a80101200e6434366530653635616361321e1e44342d36452d30452d36352d41432d41323a667265653567632d61703d06000000130606000000020506000000011f1343342d38352d30382d37372d41372d44314d18434f4e4e4543542035344d627073203830322e3131612c1246353238333441373931303734433836ba06000fac04bb06000fac04bc06000fac010c06000005784f0d0295000b01746e676675655012e565dcb823258eb3674291b6a5e4b199"
+
+	// Decode the hexadecimal string to bytes
+	aaaPacket, err := hex.DecodeString(hexString)
+	if err != nil {
+		fmt.Printf("Failed to decode hex string: %v\n", err)
+		return
+	}
+	if _, err := udpConnection.WriteToUDP(aaaPacket, tngfRadiusUDPAddr); err != nil {
+		t.Fatalf("Write Radius maessage fail: %+v", err)
+	}
 	// IKE_SA_INIT
 	ikeInitiatorSPI := uint64(123123)
 	ikeMessage := new(message.IKEMessage)

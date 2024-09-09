@@ -30,6 +30,8 @@ import (
 	"github.com/free5gc/tngf/pkg/ike/handler"
 	"github.com/free5gc/tngf/pkg/ike/message"
 	"github.com/free5gc/tngf/pkg/ike/xfrm"
+	radius_handler "github.com/free5gc/tngf/pkg/radius/handler"
+	radius_message "github.com/free5gc/tngf/pkg/radius/message"
 	"github.com/free5gc/util/ueauth"
 )
 
@@ -182,18 +184,18 @@ func tngfgenerateSPI(tngfue *context.TNGFUe) []byte {
 // 	return
 // }
 
-// func setupUDPSocket() (*net.UDPConn, error) {
-// 	bindAddr := tngfueInfo_IPSecIfaceAddr + ":500"
-// 	udpAddr, err := net.ResolveUDPAddr("udp", bindAddr)
-// 	if err != nil {
-// 		return nil, fmt.Errorf("Resolve UDP address failed: %+v", err)
-// 	}
-// 	udpListener, err := net.ListenUDP("udp", udpAddr)
-// 	if err != nil {
-// 		return nil, fmt.Errorf("Resolve UDP address failed: %+v", err)
-// 	}
-// 	return udpListener, nil
-// }
+func setupRadiusSocket() (*net.UDPConn, error) {
+	bindAddr := tngfueInfo_IPSecIfaceAddr + ":48744"
+	udpAddr, err := net.ResolveUDPAddr("udp", bindAddr)
+	if err != nil {
+		return nil, fmt.Errorf("Resolve UDP address failed: %+v", err)
+	}
+	udpListener, err := net.ListenUDP("udp", udpAddr)
+	if err != nil {
+		return nil, fmt.Errorf("Resolve UDP address failed: %+v", err)
+	}
+	return udpListener, nil
+}
 
 // func concatenateNonceAndSPI(nonce []byte, SPI_initiator uint64, SPI_responder uint64) []byte {
 // 	spi := make([]byte, 8)
@@ -898,6 +900,25 @@ func tngfsendPduSessionEstablishmentRequest(
 	return ifaces, nil
 }
 
+// create EAP Identity and append to Radius payload
+func BuildEAPIdentity(container *radius_message.RadiusPayloadContainer, identifier uint8, identityData []byte) {
+	eap := new(radius_message.EAP)
+	eap.Code = radius_message.EAPCodeResponse
+	eap.Identifier = identifier
+	eapIdentity := new(radius_message.EAPIdentity)
+	eapIdentity.IdentityData = identityData
+	eap.EAPTypeData = append(eap.EAPTypeData, eapIdentity)
+	eapPayload, err := eap.Marshal()
+	if err != nil {
+		return
+	}
+	payload := new(radius_message.RadiusPayload)
+	payload.Type = radius_message.TypeEAPMessage
+	payload.Val = eapPayload
+
+	*container = append(*container, *payload)
+}
+
 func TestTngfUE(t *testing.T) {
 	// New UE
 	ue := NewRanUeContext("imsi-2089300007487", 1, security.AlgCiphering128NEA0, security.AlgIntegrity128NIA2,
@@ -923,24 +944,110 @@ func TestTngfUE(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Resolve UDP address %s fail: %+v", tngfInfo_IPSecIfaceAddr+":500", err)
 	}
+	// ueUDPAddr, err := net.ResolveUDPAddr("udp", tngfueInfo_IPSecIfaceAddr+":48744")
+	// if err != nil {
+	// 	t.Fatalf("Resolve UDP address %s fail: %+v", tngfueInfo_IPSecIfaceAddr+":48744", err)
+	// }
 	udpConnection, err := setupUDPSocket()
+	radiusConnection, err := setupRadiusSocket()
 
 	if err != nil {
 		t.Fatalf("Setup UDP socket Fail: %+v", err)
 	}
 
-	// AAA
-	// Captured packet binary content as a hexadecimal string
-	hexString := "010500d4ea408c3a615fc82899bb8f2fa2e374e90108746e676675650406c0a80101200e6434366530653635616361321e1e44342d36452d30452d36352d41432d41323a667265653567632d61703d06000000130606000000020506000000011f1343342d38352d30382d37372d41372d44314d18434f4e4e4543542035344d627073203830322e3131612c1246353238333441373931303734433836ba06000fac04bb06000fac04bc06000fac010c06000005784f0d0295000b01746e676675655012e565dcb823258eb3674291b6a5e4b199"
+	// calling station payload
+	callingStationPayload := new(radius_message.RadiusPayload)
+	callingStationPayload.Type = radius_message.TypeCallingStationId
+	callingStationPayload.Length = uint8(19)
+	callingStationPayload.Val = []byte("C4-85-08-77-A7-D1")
+	// called station payload
+	calledStationPayload := new(radius_message.RadiusPayload)
+	calledStationPayload.Type = radius_message.TypeCalledStationId
+	calledStationPayload.Length = uint8(30)
+	calledStationPayload.Val = []byte("D4-6E-0E-65-AC-A2:free5gc-ap")
+	// UE user name payload
+	ueUserNamePayload := new(radius_message.RadiusPayload)
+	ueUserNamePayload.Type = radius_message.TypeUserName
+	ueUserNamePayload.Length = uint8(8)
+	ueUserNamePayload.Val = []byte("tngfue")
 
-	// Decode the hexadecimal string to bytes
-	aaaPacket, err := hex.DecodeString(hexString)
+	// AAA message, send to tngf
+	// create a new radius message
+	ueRadiusMessage := new(radius_message.RadiusMessage)
+	radiusAuthenticator, err := hex.DecodeString("ea408c3a615fc82899bb8f2fa2e374e9")
 	if err != nil {
 		fmt.Printf("Failed to decode hex string: %v\n", err)
 		return
 	}
-	if _, err := udpConnection.WriteToUDP(aaaPacket, tngfRadiusUDPAddr); err != nil {
+
+	ueRadiusMessage.BuildRadiusHeader(radius_message.AccessRequest, 0x01, radiusAuthenticator)
+	ueRadiusMessage.Length = 0x6c
+	// create Radius payload
+	ueRadiusPayload := new(radius_message.RadiusPayloadContainer)
+	*ueRadiusPayload = append(*ueRadiusPayload, *ueUserNamePayload, *calledStationPayload, *callingStationPayload)
+
+	// Create EAP message (Identity) payload
+	identifier, err := radius_handler.GenerateRandomUint8()
+	if err != nil {
+		t.Errorf("Random number failed: %+v", err)
+		return
+	}
+	BuildEAPIdentity(ueRadiusPayload, identifier, []byte("tngfue"))
+
+	// Create Authenticator payload
+	// authPayload := new(radius_message.RadiusPayload)
+	// authPayload.Type = radius_message.TypeMessageAuthenticator
+	// authPayload.Length = uint8(18)
+	// authPayload.Val = make([]byte, 16)
+	// ueRadiusMessage.Payloads = *ueRadiusPayload
+	// ueRadiusMessage.Payloads = append(ueRadiusMessage.Payloads, *authPayload)
+	// authPayload.Val = radius_handler.GetMessageAuthenticator(ueRadiusMessage)
+	// *ueRadiusPayload = append(*ueRadiusPayload, *authPayload)
+
+	ueRadiusMessage.Payloads = *ueRadiusPayload
+	pkt, err := ueRadiusMessage.Encode()
+	if err != nil {
+		t.Fatalf("Radius Message Encoding error: %+v", err)
+	}
+	// Send to tngf
+	if _, err := radiusConnection.WriteToUDP(pkt, tngfRadiusUDPAddr); err != nil {
 		t.Fatalf("Write Radius maessage fail: %+v", err)
+	}
+	// radius_handler.SendRadiusMessageToUE(radiusConnection, ueUDPAddr, tngfRadiusUDPAddr, ueRadiusMessage)
+
+	// Receive TNGF reply
+	buffer := make([]byte, 65535)
+	n, _, err := radiusConnection.ReadFromUDP(buffer)
+	if err != nil {
+		t.Fatalf("Read Radius message failed: %+v", err)
+	}
+
+	// 5GNAS
+	hexString := "010601145095e4b8e2ac0f2c39bb0e6b0c59a9120108746e676675650406c0a80101200e6434366530653635616361321e1e44342d36452d30452d36352d41432d41323a667265653567632d61703d06000000130606000000020506000000011f1343342d38352d30382d37372d41372d44314d18434f4e4e4543542035344d627073203830322e3131612c1246353238333441373931303734433836ba06000fac04bb06000fac04bc06000fac010c06000005784f4d0236004bfe0028af0000000302000022061077000d0102f839f0ff00000000000070010602f839cafe00040103020302f83900177e004179000d0102f839f0ff000000000000702e02802050129ecce679b9d0b8237e1ef299b7f83f24"
+	// Decode the hexadecimal string to bytes
+	eapPacket, err := hex.DecodeString(hexString)
+	if err != nil {
+		fmt.Printf("Failed to decode hex string: %v\n", err)
+		return
+	}
+	// ueRadiusMessage = new(radius_message.RadiusMessage)
+	// radiusAuthenticator, err = hex.DecodeString("5095e4b8e2ac0f2c39bb0e6b0c59a912")
+	// if err != nil {
+	// 	fmt.Printf("Failed to decode hex string: %v\n", err)
+	// 	return
+	// }
+
+	// ueRadiusMessage.BuildRadiusHeader(radius_message.AccessRequest, 0x06, radiusAuthenticator)
+
+	if _, err := radiusConnection.WriteToUDP(eapPacket, tngfRadiusUDPAddr); err != nil {
+		t.Fatalf("Write Radius maessage fail: %+v", err)
+	}
+	return
+	// Receive TNGF reply
+	buffer = make([]byte, 65535)
+	n, _, err = radiusConnection.ReadFromUDP(buffer)
+	if err != nil {
+		t.Fatalf("Read Radius message failed: %+v", err)
 	}
 	// IKE_SA_INIT
 	ikeInitiatorSPI := uint64(123123)
@@ -992,8 +1099,7 @@ func TestTngfUE(t *testing.T) {
 	}
 
 	// Receive TNGF reply
-	buffer := make([]byte, 65535)
-	n, _, err := udpConnection.ReadFromUDP(buffer)
+	n, _, err = udpConnection.ReadFromUDP(buffer)
 	if err != nil {
 		t.Fatalf("Read IKE Message fail: %+v", err)
 	}

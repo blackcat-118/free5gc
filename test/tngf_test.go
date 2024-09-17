@@ -1,6 +1,9 @@
 package test
 
 import (
+	"crypto/hmac"
+	"crypto/md5"
+	"crypto/rand"
 	"encoding/binary"
 	"encoding/hex"
 	"errors"
@@ -944,6 +947,45 @@ func BuildEAP5GNAS(container *radius_message.RadiusPayloadContainer, identifier 
 
 	*container = append(*container, *payload)
 }
+
+func UEencode(radiusMessage *radius_message.RadiusMessage) ([]byte, error) {
+
+	radiusMessageData := make([]byte, 4)
+
+	radiusMessageData[0] = radiusMessage.Code
+	radiusMessageData[1] = radiusMessage.PktID
+	radiusMessageData = append(radiusMessageData, radiusMessage.Auth...)
+
+	radiusMessagePayloadData, err := radiusMessage.Payloads.Encode()
+	if err != nil {
+		return nil, fmt.Errorf("Encode(): EncodePayload failed: %+v", err)
+	}
+	radiusMessageData = append(radiusMessageData, radiusMessagePayloadData...)
+	binary.BigEndian.PutUint16(radiusMessageData[2:4], uint16(len(radiusMessageData)))
+
+	return radiusMessageData, nil
+}
+
+func GetMessageAuthenticator(message *radius_message.RadiusMessage) []byte {
+	radius_secret := []byte("free5gctngf")
+	radiusMessageData := make([]byte, 4)
+
+	radiusMessageData[0] = message.Code
+	radiusMessageData[1] = message.PktID
+	radiusMessageData = append(radiusMessageData, message.Auth...)
+
+	radiusMessagePayloadData, err := message.Payloads.Encode()
+	if err != nil {
+		return nil
+	}
+	radiusMessageData = append(radiusMessageData, radiusMessagePayloadData...)
+	binary.BigEndian.PutUint16(radiusMessageData[2:4], uint16(len(radiusMessageData)))
+
+	hmacFun := hmac.New(md5.New, radius_secret) // radius_secret is same as cfg's radius_secret
+	hmacFun.Write(radiusMessageData)
+	return hmacFun.Sum(nil)
+}
+
 func TestTngfUE(t *testing.T) {
 	// New UE
 	ue := NewRanUeContext("imsi-2089300007487", 1, security.AlgCiphering128NEA0, security.AlgIntegrity128NIA2,
@@ -996,10 +1038,13 @@ func TestTngfUE(t *testing.T) {
 	ueUserNamePayload.Length = uint8(8)
 	ueUserNamePayload.Val = []byte("tngfue")
 
+	var pkt []byte
+
 	// Step3: AAA message, send to tngf
 	// create a new radius message
 	ueRadiusMessage := new(radius_message.RadiusMessage)
-	radiusAuthenticator, err := hex.DecodeString("ea408c3a615fc82899bb8f2fa2e374e9")
+	radiusAuthenticator := make([]byte, 16)
+	rand.Read(radiusAuthenticator) // request authenticator is random
 	if err != nil {
 		fmt.Printf("Failed to decode hex string: %v\n", err)
 		return
@@ -1019,17 +1064,19 @@ func TestTngfUE(t *testing.T) {
 	BuildEAPIdentity(ueRadiusPayload, identifier, []byte("tngfue"))
 
 	// create Authenticator payload
-	// authPayload := new(radius_message.RadiusPayload)
-	// authPayload.Type = radius_message.TypeMessageAuthenticator
-	// authPayload.Length = uint8(18)
-	// authPayload.Val = make([]byte, 16)
-	// ueRadiusMessage.Payloads = *ueRadiusPayload
-	// ueRadiusMessage.Payloads = append(ueRadiusMessage.Payloads, *authPayload)
-	// authPayload.Val = radius_handler.GetMessageAuthenticator(ueRadiusMessage)
-	// *ueRadiusPayload = append(*ueRadiusPayload, *authPayload)
+	authPayload := new(radius_message.RadiusPayload)
+	authPayload.Type = radius_message.TypeMessageAuthenticator
+	authPayload.Length = uint8(18)
+	authPayload.Val = make([]byte, 16)
 
 	ueRadiusMessage.Payloads = *ueRadiusPayload
-	pkt, err := ueRadiusMessage.Encode()
+	ueRadiusMessage.Payloads = append(ueRadiusMessage.Payloads, *authPayload)
+	authPayload.Val = GetMessageAuthenticator(ueRadiusMessage)
+	*ueRadiusPayload = append(*ueRadiusPayload, *authPayload)
+	ueRadiusMessage.Payloads = *ueRadiusPayload
+
+	pkt, err = UEencode(ueRadiusMessage)
+
 	if err != nil {
 		t.Fatalf("Radius Message Encoding error: %+v", err)
 	}

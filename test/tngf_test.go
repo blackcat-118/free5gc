@@ -922,16 +922,7 @@ func BuildEAPIdentity(container *radius_message.RadiusPayloadContainer, identifi
 	*container = append(*container, *payload)
 }
 
-func BuildEAP5GNAS(container *radius_message.RadiusPayloadContainer, identifier uint8, nasPDU []byte) {
-	var vendorData []byte
-	// Message ID
-	vendorData = append(vendorData, radius_message.EAP5GType5GNAS)
-	vendorData = append(vendorData, nasPDU...)
-	// header[0] =
-	// NASPDU length (2 octets)
-	// binary.BigEndian.PutUint16(header[2:4], uint16(len(nasPDU)))
-	// vendorData := header
-
+func BuildEAP5GNAS(container *radius_message.RadiusPayloadContainer, identifier uint8, vendorData []byte) {
 	eap := new(radius_message.EAP)
 	eap.Code = radius_message.EAPCodeResponse
 	eap.Identifier = identifier
@@ -1106,15 +1097,33 @@ func TestTngfUE(t *testing.T) {
 	ueRadiusPayload = new(radius_message.RadiusPayloadContainer)
 	*ueRadiusPayload = append(*ueRadiusPayload, *ueUserNamePayload, *calledStationPayload, *callingStationPayload)
 
-	// Create EAP message (Expanded) payload
+	// create EAP message (Expanded) payload
 	identifier, err = radius_handler.GenerateRandomUint8()
 	if err != nil {
 		t.Errorf("Random number failed: %+v", err)
 		return
 	}
-	nasPDU, err := hex.DecodeString("000022061077000d0102f839f0ff00000000000070010602f839cafe00040103020302f83900177e004179000d0102f839f0ff000000000000702e028020")
+	// EAP-5G vendor type data
+	eapVendorTypeData := make([]byte, 2)
+	eapVendorTypeData[0] = message.EAP5GType5GNAS
+	// AN Parameters
+	anParameters := buildEAP5GANParameters()
+	anParametersLength := make([]byte, 2)
+	binary.BigEndian.PutUint16(anParametersLength, uint16(len(anParameters)))
+	eapVendorTypeData = append(eapVendorTypeData, anParametersLength...)
+	eapVendorTypeData = append(eapVendorTypeData, anParameters...)
 
-	BuildEAP5GNAS(ueRadiusPayload, identifier, nasPDU)
+	// NAS-PDU (Registration Request)
+	ueSecurityCapability := ue.GetUESecurityCapability()
+	registrationRequest := nasTestpacket.GetRegistrationRequest(nasMessage.RegistrationType5GSInitialRegistration,
+		mobileIdentity5GS, nil, ueSecurityCapability, nil, nil, nil)
+
+	nasLength := make([]byte, 2)
+	binary.BigEndian.PutUint16(nasLength, uint16(len(registrationRequest)))
+	eapVendorTypeData = append(eapVendorTypeData, nasLength...)
+	eapVendorTypeData = append(eapVendorTypeData, registrationRequest...)
+
+	BuildEAP5GNAS(ueRadiusPayload, identifier, eapVendorTypeData)
 
 	ueRadiusMessage.Payloads = *ueRadiusPayload
 	pkt, err = ueRadiusMessage.Encode()
@@ -1326,22 +1335,22 @@ func TestTngfUE(t *testing.T) {
 	ikePayload.Reset()
 
 	// EAP-5G vendor type data
-	eapVendorTypeData := make([]byte, 2)
+	eapVendorTypeData = make([]byte, 2)
 	eapVendorTypeData[0] = message.EAP5GType5GNAS
 
 	// AN Parameters
-	anParameters := buildEAP5GANParameters()
-	anParametersLength := make([]byte, 2)
+	anParameters = buildEAP5GANParameters()
+	anParametersLength = make([]byte, 2)
 	binary.BigEndian.PutUint16(anParametersLength, uint16(len(anParameters)))
 	eapVendorTypeData = append(eapVendorTypeData, anParametersLength...)
 	eapVendorTypeData = append(eapVendorTypeData, anParameters...)
 
 	// NAS
-	ueSecurityCapability := ue.GetUESecurityCapability()
-	registrationRequest := nasTestpacket.GetRegistrationRequest(nasMessage.RegistrationType5GSInitialRegistration,
+	ueSecurityCapability = ue.GetUESecurityCapability()
+	registrationRequest = nasTestpacket.GetRegistrationRequest(nasMessage.RegistrationType5GSInitialRegistration,
 		mobileIdentity5GS, nil, ueSecurityCapability, nil, nil, nil)
 
-	nasLength := make([]byte, 2)
+	nasLength = make([]byte, 2)
 	binary.BigEndian.PutUint16(nasLength, uint16(len(registrationRequest)))
 	eapVendorTypeData = append(eapVendorTypeData, nasLength...)
 	eapVendorTypeData = append(eapVendorTypeData, registrationRequest...)

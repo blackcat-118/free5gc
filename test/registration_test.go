@@ -28,7 +28,6 @@ import (
 	"golang.org/x/net/icmp"
 	"golang.org/x/net/ipv4"
 
-	// ausf_context "github.com/free5gc/ausf/context"
 	"github.com/free5gc/nas"
 	"github.com/free5gc/nas/nasMessage"
 	"github.com/free5gc/nas/nasType"
@@ -85,7 +84,6 @@ func TestRegistration(t *testing.T) {
 	assert.True(t, ngapPdu.Present == ngapType.NGAPPDUPresentSuccessfulOutcome && ngapPdu.SuccessfulOutcome.ProcedureCode.Value == ngapType.ProcedureCodeNGSetup, "No NGSetupResponse received.")
 
 	// New UE
-	// ue := test.NewRanUeContext("imsi-2089300007487", 1, security.AlgCiphering128NEA2, security.AlgIntegrity128NIA2, models.AccessType__3_GPP_ACCESS)
 	ue := test.NewRanUeContext("imsi-2089300007487", 1, security.AlgCiphering128NEA0, security.AlgIntegrity128NIA2,
 		models.AccessType__3_GPP_ACCESS)
 	ue.AmfUeNgapId = 1
@@ -603,7 +601,6 @@ func TestServiceRequest(t *testing.T) {
 	assert.Nil(t, err)
 
 	// UE is CM-IDLE now
-
 	time.Sleep(1 * time.Second)
 
 	ue.AmfUeNgapId = 2
@@ -623,6 +620,7 @@ func TestServiceRequest(t *testing.T) {
 	assert.Nil(t, err)
 
 	// update AMF UE NGAP ID
+	require.NotNil(t, ngapMsg.InitiatingMessage.Value.InitialContextSetupRequest)
 	ue.AmfUeNgapId = ngapMsg.InitiatingMessage.
 		Value.InitialContextSetupRequest.ProtocolIEs.List[0].Value.AMFUENGAPID.Value
 

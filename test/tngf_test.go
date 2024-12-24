@@ -934,6 +934,25 @@ func BuildEAP5GNAS(container *radius_message.RadiusPayloadContainer, identifier 
 	*container = append(*container, *payload)
 }
 
+func BuildEAP5GNotification(container *radius_message.RadiusPayloadContainer, identifier uint8) {
+	eap := new(radius_message.EAP)
+	eap.Code = radius_message.EAPCodeResponse
+	eap.Identifier = identifier
+	vendorData := make([]byte, 2)
+	vendorData[0] = radius_message.EAP5GType5GNotification
+	eap.EAPTypeData.BuildEAPExpanded(radius_message.VendorID3GPP, radius_message.VendorTypeEAP5G, vendorData)
+	eapPayload, err := eap.Marshal()
+	if err != nil {
+		return
+	}
+
+	payload := new(radius_message.RadiusPayload)
+	payload.Type = radius_message.TypeEAPMessage
+	payload.Val = eapPayload
+
+	*container = append(*container, *payload)
+}
+
 func UEencode(radiusMessage *radius_message.RadiusMessage) ([]byte, error) {
 
 	radiusMessageData := make([]byte, 4)
@@ -1174,7 +1193,7 @@ func TestTngfUE(t *testing.T) {
 	rand := decodedNAS.AuthenticationRequest.GetRANDValue()
 	resStat := ue.DeriveRESstarAndSetKey(ue.AuthenticationSubs, rand[:], "5G:mnc093.mcc208.3gppnetwork.org")
 
-	// Step 7b: Send Authentication
+	// Send Authentication
 
 	ueRadiusMessage = new(radius_message.RadiusMessage)
 	radiusAuthenticator, err = hex.DecodeString("ea408c3a615fc82899bb8f2fa2e374e9")
@@ -1230,6 +1249,115 @@ func TestTngfUE(t *testing.T) {
 		t.Fatalf("Decode Radius message failed: %+v", err)
 	}
 
+	// Step 9c:
+	ueRadiusMessage = new(radius_message.RadiusMessage)
+	radiusAuthenticator, err = hex.DecodeString("ea408c3a615fc82899bb8f2fa2e374e9")
+	if err != nil {
+		fmt.Printf("Failed to decode hex string: %v\n", err)
+		return
+	}
+
+	ueRadiusMessage.BuildRadiusHeader(radius_message.AccessRequest, 0x08, radiusAuthenticator)
+	// create Radius payload
+	ueRadiusPayload = new(radius_message.RadiusPayloadContainer)
+	*ueRadiusPayload = append(*ueRadiusPayload, *ueUserNamePayload, *calledStationPayload, *callingStationPayload)
+
+	// create EAP message (Expanded) payload
+	identifier, err = radius_handler.GenerateRandomUint8()
+	if err != nil {
+		t.Errorf("Random number failed: %+v", err)
+		return
+	}
+	// EAP-5G vendor type data
+	eapVendorTypeData = make([]byte, 2)
+	eapVendorTypeData[0] = message.EAP5GType5GNAS
+
+	// AN Parameters
+	anParameters = buildEAP5GANParameters()
+	anParametersLength = make([]byte, 2)
+	binary.BigEndian.PutUint16(anParametersLength, uint16(len(anParameters)))
+	eapVendorTypeData = append(eapVendorTypeData, anParametersLength...)
+	eapVendorTypeData = append(eapVendorTypeData, anParameters...)
+
+	// NAS-PDU (SMC Complete)
+	registrationRequestWith5GMM := nasTestpacket.GetRegistrationRequest(nasMessage.RegistrationType5GSInitialRegistration,
+		mobileIdentity5GS, nil, ueSecurityCapability, ue.Get5GMMCapability(), nil, nil)
+	smcComplete := nasTestpacket.GetSecurityModeComplete(registrationRequestWith5GMM)
+	smcComplete, err = EncodeNasPduWithSecurity(ue, smcComplete, nas.SecurityHeaderTypeIntegrityProtectedAndCipheredWithNew5gNasSecurityContext, true, true)
+	assert.Nil(t, err)
+	nasLength = make([]byte, 2)
+	binary.BigEndian.PutUint16(nasLength, uint16(len(smcComplete)))
+	eapVendorTypeData = append(eapVendorTypeData, nasLength...)
+	eapVendorTypeData = append(eapVendorTypeData, smcComplete...)
+
+	BuildEAP5GNAS(ueRadiusPayload, identifier, eapVendorTypeData)
+
+	ueRadiusMessage.Payloads = *ueRadiusPayload
+	pkt, err = ueRadiusMessage.Encode()
+	if err != nil {
+		t.Fatalf("Radius Message Encoding error: %+v", err)
+	}
+	// Send to tngf
+	if _, err := radiusConnection.WriteToUDP(pkt, tngfRadiusUDPAddr); err != nil {
+		t.Fatalf("Write Radius maessage fail: %+v", err)
+	}
+
+	// Step 10b: Receive TNGF reply
+	buffer = make([]byte, 65535)
+	n, _, err = radiusConnection.ReadFromUDP(buffer)
+	if err != nil {
+		t.Fatalf("Read Radius message failed: %+v", err)
+	}
+
+	err = ueRadiusMessage.Decode(buffer[:n])
+	if err != nil {
+		t.Fatalf("Decode Radius message failed: %+v", err)
+	}
+
+	// 10c: EAP-Res/5G-Notification
+	ueRadiusMessage = new(radius_message.RadiusMessage)
+	radiusAuthenticator, err = hex.DecodeString("ea408c3a615fc82899bb8f2fa2e374e9")
+	if err != nil {
+		fmt.Printf("Failed to decode hex string: %v\n", err)
+		return
+	}
+
+	ueRadiusMessage.BuildRadiusHeader(radius_message.AccessRequest, 0x09, radiusAuthenticator)
+	// create Radius payload
+	ueRadiusPayload = new(radius_message.RadiusPayloadContainer)
+	*ueRadiusPayload = append(*ueRadiusPayload, *ueUserNamePayload, *calledStationPayload, *callingStationPayload)
+
+	// create EAP message (Expanded) payload
+	identifier, err = radius_handler.GenerateRandomUint8()
+	if err != nil {
+		t.Errorf("Random number failed: %+v", err)
+		return
+	}
+	BuildEAP5GNotification(ueRadiusPayload, identifier)
+
+	ueRadiusMessage.Payloads = *ueRadiusPayload
+	pkt, err = ueRadiusMessage.Encode()
+	if err != nil {
+		t.Fatalf("Radius Message Encoding error: %+v", err)
+	}
+	// Send to tngf
+	if _, err := radiusConnection.WriteToUDP(pkt, tngfRadiusUDPAddr); err != nil {
+		t.Fatalf("Write Radius maessage fail: %+v", err)
+	}
+
+	// 10e: EAP-Success
+	// Receive TNGF reply
+	buffer = make([]byte, 65535)
+	n, _, err = radiusConnection.ReadFromUDP(buffer)
+	if err != nil {
+		t.Fatalf("Read Radius message failed: %+v", err)
+	}
+
+	err = ueRadiusMessage.Decode(buffer[:n])
+	if err != nil {
+		t.Fatalf("Decode Radius message failed: %+v", err)
+	}
+	// IKE_SA_INIT
 }
 
 // func setUESecurityCapability(ue *RanUeContext) (UESecurityCapability *nasType.UESecurityCapability) {

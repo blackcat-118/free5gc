@@ -9,6 +9,7 @@ import (
 	"errors"
 	"fmt"
 	"hash"
+	"math/big"
 	"net"
 	"strconv"
 	"testing"
@@ -20,17 +21,18 @@ import (
 	"github.com/vishvananda/netlink"
 	"golang.org/x/sys/unix"
 
+	"github.com/free5gc/n3iwf/pkg/ike/security"
 	"github.com/free5gc/nas"
 	"github.com/free5gc/nas/nasMessage"
 	"github.com/free5gc/nas/nasType"
-	"github.com/free5gc/nas/security"
+	nasSecurity "github.com/free5gc/nas/security"
 	"github.com/free5gc/openapi/models"
 	"github.com/free5gc/tngf/pkg/context"
 	"github.com/free5gc/tngf/pkg/ike/handler"
 	"github.com/free5gc/tngf/pkg/ike/message"
 	"github.com/free5gc/tngf/pkg/ike/xfrm"
-	radius_handler "github.com/free5gc/tngf/pkg/radius/handler"
-	radius_message "github.com/free5gc/tngf/pkg/radius/message"
+	radiusHandler "github.com/free5gc/tngf/pkg/radius/handler"
+	radiusMessage "github.com/free5gc/tngf/pkg/radius/message"
 )
 
 var (
@@ -45,7 +47,7 @@ var (
 	tngfueInnerAddr                = new(net.IPNet)
 )
 
-func tngfgenerateSPI(tngfue *context.TNGFUe) []byte {
+func tngfGenerateSPI(tngfue *context.TNGFUe) []byte {
 	var spi uint32
 	spiByte := make([]byte, 4)
 	for {
@@ -206,7 +208,7 @@ func setupRadiusSocket() (*net.UDPConn, error) {
 // 	return newSlice
 // }
 
-func tngfgenerateKeyForIKESA(ikeSecurityAssociation *context.IKESecurityAssociation) error {
+func tngfGenerateKeyForIKESA(ikeSecurityAssociation *context.IKESecurityAssociation) error {
 	// Transforms
 	transformPseudorandomFunction := ikeSecurityAssociation.PseudorandomFunction
 
@@ -269,7 +271,7 @@ func tngfgenerateKeyForIKESA(ikeSecurityAssociation *context.IKESecurityAssociat
 	return nil
 }
 
-func tngfgenerateKeyForChildSA(ikeSecurityAssociation *context.IKESecurityAssociation, childSecurityAssociation *context.ChildSecurityAssociation) error {
+func tngfGenerateKeyForChildSA(ikeSecurityAssociation *context.IKESecurityAssociation, childSecurityAssociation *context.ChildSecurityAssociation) error {
 	// Transforms
 	transformPseudorandomFunction := ikeSecurityAssociation.PseudorandomFunction
 	var transformIntegrityAlgorithmForIPSec *message.Transform
@@ -317,7 +319,7 @@ func tngfgenerateKeyForChildSA(ikeSecurityAssociation *context.IKESecurityAssoci
 
 }
 
-func tngfdecryptProcedure(ikeSecurityAssociation *context.IKESecurityAssociation, ikeMessage *message.IKEMessage, encryptedPayload *message.Encrypted) (message.IKEPayloadContainer, error) {
+func tngfDecryptProcedure(ikeSecurityAssociation *context.IKESecurityAssociation, ikeMessage *message.IKEMessage, encryptedPayload *message.Encrypted) (message.IKEPayloadContainer, error) {
 	// Load needed information
 	transformIntegrityAlgorithm := ikeSecurityAssociation.IntegrityAlgorithm
 	transformEncryptionAlgorithm := ikeSecurityAssociation.EncryptionAlgorithm
@@ -356,7 +358,7 @@ func tngfdecryptProcedure(ikeSecurityAssociation *context.IKESecurityAssociation
 
 }
 
-func tngfencryptProcedure(ikeSecurityAssociation *context.IKESecurityAssociation, ikePayload message.IKEPayloadContainer, responseIKEMessage *message.IKEMessage) error {
+func tngfEncryptProcedure(ikeSecurityAssociation *context.IKESecurityAssociation, ikePayload message.IKEPayloadContainer, responseIKEMessage *message.IKEMessage) error {
 	// Load needed information
 	transformIntegrityAlgorithm := ikeSecurityAssociation.IntegrityAlgorithm
 	transformEncryptionAlgorithm := ikeSecurityAssociation.EncryptionAlgorithm
@@ -472,7 +474,7 @@ func tngfencryptProcedure(ikeSecurityAssociation *context.IKESecurityAssociation
 // 	return anParameters
 // }
 
-func tngfparseIPAddressInformationToChildSecurityAssociation(
+func tngfParseIPAddressInformationToChildSecurityAssociation(
 	childSecurityAssociation *context.ChildSecurityAssociation,
 	trafficSelectorLocal *message.IndividualTrafficSelector,
 	trafficSelectorRemote *message.IndividualTrafficSelector) error {
@@ -505,7 +507,7 @@ func tngfparseIPAddressInformationToChildSecurityAssociation(
 // 	DSCP            uint8
 // }
 
-func tngfparse5GQoSInfoNotify(n *message.Notification) (info *PDUQoSInfo, err error) {
+func tngfParse5GQoSInfoNotify(n *message.Notification) (info *PDUQoSInfo, err error) {
 	info = new(PDUQoSInfo)
 	var offset int = 0
 	data := n.NotificationData
@@ -527,7 +529,7 @@ func tngfparse5GQoSInfoNotify(n *message.Notification) (info *PDUQoSInfo, err er
 	return
 }
 
-func tngfapplyXFRMRule(ue_is_initiator bool, ifId uint32, childSecurityAssociation *context.ChildSecurityAssociation) error {
+func tngfApplyXFRMRule(ue_is_initiator bool, ifId uint32, childSecurityAssociation *context.ChildSecurityAssociation) error {
 	// Build XFRM information data structure for incoming traffic.
 
 	// Mark
@@ -649,7 +651,7 @@ func tngfapplyXFRMRule(ue_is_initiator bool, ifId uint32, childSecurityAssociati
 	return nil
 }
 
-func tngfsendPduSessionEstablishmentRequest(
+func tngfSendPduSessionEstablishmentRequest(
 	pduSessionId uint8,
 	ue *RanUeContext,
 	n3Info *context.TNGFUe,
@@ -706,7 +708,7 @@ func tngfsendPduSessionEstablishmentRequest(
 	if !ok {
 		return ifaces, errors.New("Received pakcet is not an encrypted payload")
 	}
-	decryptedIKEPayload, err := tngfdecryptProcedure(ikeSA, ikeMessage, encryptedPayload)
+	decryptedIKEPayload, err := tngfDecryptProcedure(ikeSA, ikeMessage, encryptedPayload)
 	if err != nil {
 		return ifaces, fmt.Errorf("Decrypt IKE Message Fail:%+v", err)
 	}
@@ -731,7 +733,7 @@ func tngfsendPduSessionEstablishmentRequest(
 			notification := ikePayload.(*message.Notification)
 			if notification.NotifyMessageType == message.Vendor3GPPNotifyType5G_QOS_INFO {
 				t.Logf("Received Qos Flow settings")
-				if info, err := tngfparse5GQoSInfoNotify(notification); err == nil {
+				if info, err := tngfParse5GQoSInfoNotify(notification); err == nil {
 					qoSInfo = info
 					t.Logf("NotificationData:%+v", notification.NotificationData)
 					if qoSInfo.isDSCPSpecified {
@@ -762,7 +764,7 @@ func tngfsendPduSessionEstablishmentRequest(
 	ikePayload.Reset()
 
 	// SA
-	inboundSPI := tngfgenerateSPI(n3Info)
+	inboundSPI := tngfGenerateSPI(n3Info)
 	responseSecurityAssociation.Proposals[0].SPI = inboundSPI
 	ikePayload = append(ikePayload, responseSecurityAssociation)
 
@@ -777,7 +779,7 @@ func tngfsendPduSessionEstablishmentRequest(
 	ikeSA.ConcatenatedNonce = append(ikeSA.ConcatenatedNonce, localNonce...)
 	ikePayload.BuildNonce(localNonce)
 
-	if err := tngfencryptProcedure(ikeSA, ikePayload, ikeMessage); err != nil {
+	if err := tngfEncryptProcedure(ikeSA, ikePayload, ikeMessage); err != nil {
 		t.Errorf("Encrypt IKE message failed: %+v", err)
 		return ifaces, err
 	}
@@ -807,7 +809,7 @@ func tngfsendPduSessionEstablishmentRequest(
 		return ifaces, fmt.Errorf("Create child security association context failed: %+v", err)
 	}
 
-	err = tngfparseIPAddressInformationToChildSecurityAssociation(
+	err = tngfParseIPAddressInformationToChildSecurityAssociation(
 		childSecurityAssociationContextUserPlane,
 		responseTrafficSelectorResponder.TrafficSelectors[0],
 		responseTrafficSelectorInitiator.TrafficSelectors[0])
@@ -818,7 +820,7 @@ func tngfsendPduSessionEstablishmentRequest(
 	// Select GRE traffic
 	childSecurityAssociationContextUserPlane.SelectedIPProtocol = unix.IPPROTO_GRE
 
-	if err := tngfgenerateKeyForChildSA(ikeSA, childSecurityAssociationContextUserPlane); err != nil {
+	if err := tngfGenerateKeyForChildSA(ikeSA, childSecurityAssociationContextUserPlane); err != nil {
 		return ifaces, fmt.Errorf("Generate key for child SA failed: %+v", err)
 	}
 
@@ -844,7 +846,7 @@ func tngfsendPduSessionEstablishmentRequest(
 
 	// Aplly XFRM rules
 	tngfueInfo_XfrmiId++
-	err = tngfapplyXFRMRule(false, tngfueInfo_XfrmiId, childSecurityAssociationContextUserPlane)
+	err = tngfApplyXFRMRule(false, tngfueInfo_XfrmiId, childSecurityAssociationContextUserPlane)
 
 	if err != nil {
 		t.Errorf("Applying XFRM rules failed: %+v", err)
@@ -899,61 +901,61 @@ func tngfsendPduSessionEstablishmentRequest(
 }
 
 // create EAP Identity and append to Radius payload
-func BuildEAPIdentity(container *radius_message.RadiusPayloadContainer, identifier uint8, identityData []byte) {
-	eap := new(radius_message.EAP)
-	eap.Code = radius_message.EAPCodeResponse
+func BuildEAPIdentity(container *radiusMessage.RadiusPayloadContainer, identifier uint8, identityData []byte) {
+	eap := new(radiusMessage.EAP)
+	eap.Code = radiusMessage.EAPCodeResponse
 	eap.Identifier = identifier
-	eapIdentity := new(radius_message.EAPIdentity)
+	eapIdentity := new(radiusMessage.EAPIdentity)
 	eapIdentity.IdentityData = identityData
 	eap.EAPTypeData = append(eap.EAPTypeData, eapIdentity)
 	eapPayload, err := eap.Marshal()
 	if err != nil {
 		return
 	}
-	payload := new(radius_message.RadiusPayload)
-	payload.Type = radius_message.TypeEAPMessage
+	payload := new(radiusMessage.RadiusPayload)
+	payload.Type = radiusMessage.TypeEAPMessage
 	payload.Val = eapPayload
 
 	*container = append(*container, *payload)
 }
 
-func BuildEAP5GNAS(container *radius_message.RadiusPayloadContainer, identifier uint8, vendorData []byte) {
-	eap := new(radius_message.EAP)
-	eap.Code = radius_message.EAPCodeResponse
+func BuildEAP5GNAS(container *radiusMessage.RadiusPayloadContainer, identifier uint8, vendorData []byte) {
+	eap := new(radiusMessage.EAP)
+	eap.Code = radiusMessage.EAPCodeResponse
 	eap.Identifier = identifier
-	eap.EAPTypeData.BuildEAPExpanded(radius_message.VendorID3GPP, radius_message.VendorTypeEAP5G, vendorData)
+	eap.EAPTypeData.BuildEAPExpanded(radiusMessage.VendorID3GPP, radiusMessage.VendorTypeEAP5G, vendorData)
 	eapPayload, err := eap.Marshal()
 	if err != nil {
 		return
 	}
 
-	payload := new(radius_message.RadiusPayload)
-	payload.Type = radius_message.TypeEAPMessage
+	payload := new(radiusMessage.RadiusPayload)
+	payload.Type = radiusMessage.TypeEAPMessage
 	payload.Val = eapPayload
 
 	*container = append(*container, *payload)
 }
 
-func BuildEAP5GNotification(container *radius_message.RadiusPayloadContainer, identifier uint8) {
-	eap := new(radius_message.EAP)
-	eap.Code = radius_message.EAPCodeResponse
+func BuildEAP5GNotification(container *radiusMessage.RadiusPayloadContainer, identifier uint8) {
+	eap := new(radiusMessage.EAP)
+	eap.Code = radiusMessage.EAPCodeResponse
 	eap.Identifier = identifier
 	vendorData := make([]byte, 2)
-	vendorData[0] = radius_message.EAP5GType5GNotification
-	eap.EAPTypeData.BuildEAPExpanded(radius_message.VendorID3GPP, radius_message.VendorTypeEAP5G, vendorData)
+	vendorData[0] = radiusMessage.EAP5GType5GNotification
+	eap.EAPTypeData.BuildEAPExpanded(radiusMessage.VendorID3GPP, radiusMessage.VendorTypeEAP5G, vendorData)
 	eapPayload, err := eap.Marshal()
 	if err != nil {
 		return
 	}
 
-	payload := new(radius_message.RadiusPayload)
-	payload.Type = radius_message.TypeEAPMessage
+	payload := new(radiusMessage.RadiusPayload)
+	payload.Type = radiusMessage.TypeEAPMessage
 	payload.Val = eapPayload
 
 	*container = append(*container, *payload)
 }
 
-func UEencode(radiusMessage *radius_message.RadiusMessage) ([]byte, error) {
+func UEencode(radiusMessage *radiusMessage.RadiusMessage) ([]byte, error) {
 
 	radiusMessageData := make([]byte, 4)
 
@@ -971,7 +973,7 @@ func UEencode(radiusMessage *radius_message.RadiusMessage) ([]byte, error) {
 	return radiusMessageData, nil
 }
 
-func GetMessageAuthenticator(message *radius_message.RadiusMessage) []byte {
+func GetMessageAuthenticator(message *radiusMessage.RadiusMessage) []byte {
 	radius_secret := []byte("free5gctngf")
 	radiusMessageData := make([]byte, 4)
 
@@ -993,7 +995,7 @@ func GetMessageAuthenticator(message *radius_message.RadiusMessage) []byte {
 
 func TestTngfUE(t *testing.T) {
 	// New UE
-	ue := NewRanUeContext("imsi-2089300007487", 1, security.AlgCiphering128NEA0, security.AlgIntegrity128NIA2,
+	ue := NewRanUeContext("imsi-2089300007487", 1, nasSecurity.AlgCiphering128NEA0, nasSecurity.AlgIntegrity128NIA2,
 		models.AccessType_NON_3_GPP_ACCESS)
 	ue.AmfUeNgapId = 1
 	ue.AuthenticationSubs = getAuthSubscription()
@@ -1012,15 +1014,15 @@ func TestTngfUE(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Resolve UDP address %s fail: %+v", tngfInfo_IPSecIfaceAddr+":1812", err)
 	}
-	// tngfUDPAddr, err := net.ResolveUDPAddr("udp", tngfInfo_IPSecIfaceAddr+":500")
+	tngfUDPAddr, err := net.ResolveUDPAddr("udp", tngfInfo_IPSecIfaceAddr+":500")
 	if err != nil {
 		t.Fatalf("Resolve UDP address %s fail: %+v", tngfInfo_IPSecIfaceAddr+":500", err)
 	}
-	// ueUDPAddr, err := net.ResolveUDPAddr("udp", tngfueInfo_IPSecIfaceAddr+":48744")
-	// if err != nil {
-	// 	t.Fatalf("Resolve UDP address %s fail: %+v", tngfueInfo_IPSecIfaceAddr+":48744", err)
-	// }
-	// udpConnection, err := setupUDPSocket()
+	ueUDPAddr, err := net.ResolveUDPAddr("udp", tngfueInfo_IPSecIfaceAddr+":48744")
+	if err != nil {
+		t.Fatalf("Resolve UDP address %s fail: %+v", tngfueInfo_IPSecIfaceAddr+":48744", err)
+	}
+	udpConnection, err := setupUDPSocket()
 	radiusConnection, err := setupRadiusSocket()
 
 	if err != nil {
@@ -1028,18 +1030,18 @@ func TestTngfUE(t *testing.T) {
 	}
 
 	// calling station payload
-	callingStationPayload := new(radius_message.RadiusPayload)
-	callingStationPayload.Type = radius_message.TypeCallingStationId
+	callingStationPayload := new(radiusMessage.RadiusPayload)
+	callingStationPayload.Type = radiusMessage.TypeCallingStationId
 	callingStationPayload.Length = uint8(19)
 	callingStationPayload.Val = []byte("C4-85-08-77-A7-D1")
 	// called station payload
-	calledStationPayload := new(radius_message.RadiusPayload)
-	calledStationPayload.Type = radius_message.TypeCalledStationId
+	calledStationPayload := new(radiusMessage.RadiusPayload)
+	calledStationPayload.Type = radiusMessage.TypeCalledStationId
 	calledStationPayload.Length = uint8(30)
 	calledStationPayload.Val = []byte("D4-6E-0E-65-AC-A2:free5gc-ap")
 	// UE user name payload
-	ueUserNamePayload := new(radius_message.RadiusPayload)
-	ueUserNamePayload.Type = radius_message.TypeUserName
+	ueUserNamePayload := new(radiusMessage.RadiusPayload)
+	ueUserNamePayload.Type = radiusMessage.TypeUserName
 	ueUserNamePayload.Length = uint8(8)
 	ueUserNamePayload.Val = []byte("tngfue")
 
@@ -1047,7 +1049,7 @@ func TestTngfUE(t *testing.T) {
 
 	// Step3: AAA message, send to tngf
 	// create a new radius message
-	ueRadiusMessage := new(radius_message.RadiusMessage)
+	ueRadiusMessage := new(radiusMessage.RadiusMessage)
 	radiusAuthenticator := make([]byte, 16)
 	rand.Read(radiusAuthenticator) // request authenticator is random
 	if err != nil {
@@ -1055,13 +1057,13 @@ func TestTngfUE(t *testing.T) {
 		return
 	}
 
-	ueRadiusMessage.BuildRadiusHeader(radius_message.AccessRequest, 0x05, radiusAuthenticator)
+	ueRadiusMessage.BuildRadiusHeader(radiusMessage.AccessRequest, 0x05, radiusAuthenticator)
 	// create Radius payload
-	ueRadiusPayload := new(radius_message.RadiusPayloadContainer)
+	ueRadiusPayload := new(radiusMessage.RadiusPayloadContainer)
 	*ueRadiusPayload = append(*ueRadiusPayload, *ueUserNamePayload, *calledStationPayload, *callingStationPayload)
 
 	// create EAP message (Identity) payload
-	identifier, err := radius_handler.GenerateRandomUint8()
+	identifier, err := radiusHandler.GenerateRandomUint8()
 	if err != nil {
 		t.Errorf("Random number failed: %+v", err)
 		return
@@ -1069,8 +1071,8 @@ func TestTngfUE(t *testing.T) {
 	BuildEAPIdentity(ueRadiusPayload, identifier, []byte("tngfue"))
 
 	// create Authenticator payload
-	authPayload := new(radius_message.RadiusPayload)
-	authPayload.Type = radius_message.TypeMessageAuthenticator
+	authPayload := new(radiusMessage.RadiusPayload)
+	authPayload.Type = radiusMessage.TypeMessageAuthenticator
 	authPayload.Length = uint8(18)
 	authPayload.Val = make([]byte, 16)
 
@@ -1089,7 +1091,7 @@ func TestTngfUE(t *testing.T) {
 	if _, err := radiusConnection.WriteToUDP(pkt, tngfRadiusUDPAddr); err != nil {
 		t.Fatalf("Write Radius maessage fail: %+v", err)
 	}
-	// radius_handler.SendRadiusMessageToUE(radiusConnection, ueUDPAddr, tngfRadiusUDPAddr, ueRadiusMessage)
+	// radiusHandler.SendRadiusMessageToUE(radiusConnection, ueUDPAddr, tngfRadiusUDPAddr, ueRadiusMessage)
 
 	// Step 4: receive TNGF reply
 	buffer := make([]byte, 65535)
@@ -1099,20 +1101,20 @@ func TestTngfUE(t *testing.T) {
 	}
 
 	// Step 5: 5GNAS
-	ueRadiusMessage = new(radius_message.RadiusMessage)
+	ueRadiusMessage = new(radiusMessage.RadiusMessage)
 	radiusAuthenticator, err = hex.DecodeString("ea408c3a615fc82899bb8f2fa2e374e9")
 	if err != nil {
 		fmt.Printf("Failed to decode hex string: %v\n", err)
 		return
 	}
 
-	ueRadiusMessage.BuildRadiusHeader(radius_message.AccessRequest, 0x06, radiusAuthenticator)
+	ueRadiusMessage.BuildRadiusHeader(radiusMessage.AccessRequest, 0x06, radiusAuthenticator)
 	// create Radius payload
-	ueRadiusPayload = new(radius_message.RadiusPayloadContainer)
+	ueRadiusPayload = new(radiusMessage.RadiusPayloadContainer)
 	*ueRadiusPayload = append(*ueRadiusPayload, *ueUserNamePayload, *calledStationPayload, *callingStationPayload)
 
 	// create EAP message (Expanded) payload
-	identifier, err = radius_handler.GenerateRandomUint8()
+	identifier, err = radiusHandler.GenerateRandomUint8()
 	if err != nil {
 		t.Errorf("Random number failed: %+v", err)
 		return
@@ -1164,22 +1166,22 @@ func TestTngfUE(t *testing.T) {
 
 	for _, radiusPayload := range ueRadiusMessage.Payloads {
 		switch radiusPayload.Type {
-		case radius_message.TypeEAPMessage:
+		case radiusMessage.TypeEAPMessage:
 			eapMessage = radiusPayload.Val
 		}
 	}
-	eap := new(radius_message.EAP)
+	eap := new(radiusMessage.EAP)
 	err = eap.Unmarshal(eapMessage)
-	if eap.Code != radius_message.EAPCodeRequest {
+	if eap.Code != radiusMessage.EAPCodeRequest {
 		t.Fatalf("[EAP] Received an EAP payload with code other than request. Drop the payload.")
 	}
 
 	eapTypeData := eap.EAPTypeData[0]
-	var eapExpanded *radius_message.EAPExpanded
+	var eapExpanded *radiusMessage.EAPExpanded
 
 	var decodedNAS *nas.Message
 
-	eapExpanded = eapTypeData.(*radius_message.EAPExpanded)
+	eapExpanded = eapTypeData.(*radiusMessage.EAPExpanded)
 
 	// Decode NAS - Authentication Request
 	nasData := eapExpanded.VendorData[4:]
@@ -1195,18 +1197,18 @@ func TestTngfUE(t *testing.T) {
 
 	// Send Authentication
 
-	ueRadiusMessage = new(radius_message.RadiusMessage)
+	ueRadiusMessage = new(radiusMessage.RadiusMessage)
 	radiusAuthenticator, err = hex.DecodeString("ea408c3a615fc82899bb8f2fa2e374e9")
 
 	if err != nil {
 		fmt.Printf("Failed to decode hex string: %v\n", err)
 		return
 	}
-	ueRadiusMessage.BuildRadiusHeader(radius_message.AccessRequest, 0x07, radiusAuthenticator)
-	ueRadiusPayload = new(radius_message.RadiusPayloadContainer)
+	ueRadiusMessage.BuildRadiusHeader(radiusMessage.AccessRequest, 0x07, radiusAuthenticator)
+	ueRadiusPayload = new(radiusMessage.RadiusPayloadContainer)
 	*ueRadiusPayload = append(*ueRadiusPayload, *ueUserNamePayload, *calledStationPayload, *callingStationPayload)
 	// create EAP message (Expanded) payload
-	identifier, err = radius_handler.GenerateRandomUint8()
+	identifier, err = radiusHandler.GenerateRandomUint8()
 	if err != nil {
 		t.Errorf("Random number failed: %+v", err)
 		return
@@ -1250,20 +1252,20 @@ func TestTngfUE(t *testing.T) {
 	}
 
 	// Step 9c:
-	ueRadiusMessage = new(radius_message.RadiusMessage)
+	ueRadiusMessage = new(radiusMessage.RadiusMessage)
 	radiusAuthenticator, err = hex.DecodeString("ea408c3a615fc82899bb8f2fa2e374e9")
 	if err != nil {
 		fmt.Printf("Failed to decode hex string: %v\n", err)
 		return
 	}
 
-	ueRadiusMessage.BuildRadiusHeader(radius_message.AccessRequest, 0x08, radiusAuthenticator)
+	ueRadiusMessage.BuildRadiusHeader(radiusMessage.AccessRequest, 0x08, radiusAuthenticator)
 	// create Radius payload
-	ueRadiusPayload = new(radius_message.RadiusPayloadContainer)
+	ueRadiusPayload = new(radiusMessage.RadiusPayloadContainer)
 	*ueRadiusPayload = append(*ueRadiusPayload, *ueUserNamePayload, *calledStationPayload, *callingStationPayload)
 
 	// create EAP message (Expanded) payload
-	identifier, err = radius_handler.GenerateRandomUint8()
+	identifier, err = radiusHandler.GenerateRandomUint8()
 	if err != nil {
 		t.Errorf("Random number failed: %+v", err)
 		return
@@ -1315,20 +1317,20 @@ func TestTngfUE(t *testing.T) {
 	}
 
 	// 10c: EAP-Res/5G-Notification
-	ueRadiusMessage = new(radius_message.RadiusMessage)
+	ueRadiusMessage = new(radiusMessage.RadiusMessage)
 	radiusAuthenticator, err = hex.DecodeString("ea408c3a615fc82899bb8f2fa2e374e9")
 	if err != nil {
 		fmt.Printf("Failed to decode hex string: %v\n", err)
 		return
 	}
 
-	ueRadiusMessage.BuildRadiusHeader(radius_message.AccessRequest, 0x09, radiusAuthenticator)
+	ueRadiusMessage.BuildRadiusHeader(radiusMessage.AccessRequest, 0x09, radiusAuthenticator)
 	// create Radius payload
-	ueRadiusPayload = new(radius_message.RadiusPayloadContainer)
+	ueRadiusPayload = new(radiusMessage.RadiusPayloadContainer)
 	*ueRadiusPayload = append(*ueRadiusPayload, *ueUserNamePayload, *calledStationPayload, *callingStationPayload)
 
 	// create EAP message (Expanded) payload
-	identifier, err = radius_handler.GenerateRandomUint8()
+	identifier, err = radiusHandler.GenerateRandomUint8()
 	if err != nil {
 		t.Errorf("Random number failed: %+v", err)
 		return
@@ -1358,6 +1360,109 @@ func TestTngfUE(t *testing.T) {
 		t.Fatalf("Decode Radius message failed: %+v", err)
 	}
 	// IKE_SA_INIT
+	ikeInitiatorSPI := uint64(123123)
+	ikeMessage := new(message.IKEMessage)
+	ikeMessage.BuildIKEHeader(ikeInitiatorSPI, 0, message.IKE_SA_INIT, message.InitiatorBitCheck, 0)
+
+	// Security Association
+	securityAssociation := ikeMessage.Payloads.BuildSecurityAssociation()
+	// Proposal 1
+	proposal := securityAssociation.Proposals.BuildProposal(1, message.TypeESP, nil)
+	// ENCR
+	var attributeType uint16 = message.AttributeTypeKeyLength
+	var keyLength uint16 = 128
+	proposal.EncryptionAlgorithm.BuildTransform(message.TypeEncryptionAlgorithm, message.ENCR_AES_CBC, &attributeType, &keyLength, nil)
+	// INTEG
+	proposal.IntegrityAlgorithm.BuildTransform(message.TypeIntegrityAlgorithm, message.AUTH_HMAC_SHA1_96, nil, nil, nil)
+	// PRF
+	proposal.PseudorandomFunction.BuildTransform(message.TypePseudorandomFunction, message.PRF_HMAC_SHA1, nil, nil, nil)
+	// DH
+	proposal.DiffieHellmanGroup.BuildTransform(message.TypeDiffieHellmanGroup, message.DH_2048_BIT_MODP, nil, nil, nil)
+
+	// Key exchange data
+	generator := new(big.Int).SetUint64(handler.Group14Generator)
+	factor, ok := new(big.Int).SetString(handler.Group14PrimeString, 16)
+	if !ok {
+		t.Fatalf("Generate key exchange data failed")
+	}
+	secert := security.GenerateRandomNumber()
+	localPublicKeyExchangeValue := new(big.Int).Exp(generator, secert, factor).Bytes()
+	prependZero := make([]byte, len(factor.Bytes())-len(localPublicKeyExchangeValue))
+	localPublicKeyExchangeValue = append(prependZero, localPublicKeyExchangeValue...)
+	ikeMessage.Payloads.BUildKeyExchange(message.DH_2048_BIT_MODP, localPublicKeyExchangeValue)
+
+	// Nonce
+	localNonce := security.GenerateRandomNumber().Bytes()
+	ikeMessage.Payloads.BuildNonce(localNonce)
+
+	// Send to TNGF
+	ikeMessageData, err := ikeMessage.Encode()
+	if err != nil {
+		t.Fatalf("Encode IKE Message fail: %+v", err)
+	}
+	if _, err := udpConnection.WriteToUDP(ikeMessageData, tngfUDPAddr); err != nil {
+		t.Fatalf("Write IKE maessage fail: %+v", err)
+	}
+	realMessage1, _ := ikeMessage.Encode()
+	ikeSecurityAssociation := &context.IKESecurityAssociation{
+		ResponderSignedOctets: realMessage1,
+	}
+
+	// Receive TNGF reply
+	buffer = make([]byte, 65535)
+	n, _, err = udpConnection.ReadFromUDP(buffer)
+	if err != nil {
+		t.Fatalf("Read IKE Message fail: %+v", err)
+	}
+	ikeMessage.Payloads.Reset()
+	err = ikeMessage.Decode(buffer[:n])
+	if err != nil {
+		t.Fatalf("Decode IKE Message fail: %+v", err)
+	}
+
+	var sharedKeyExchangeData []byte
+	var remoteNonce []byte
+
+	for _, ikePayload := range ikeMessage.Payloads {
+		switch ikePayload.Type() {
+		case message.TypeSA:
+			t.Log("Get SA payload")
+		case message.TypeKE:
+			remotePublicKeyExchangeValue := ikePayload.(*message.KeyExchange).KeyExchangeData
+			var i int = 0
+			for {
+				if remotePublicKeyExchangeValue[i] != 0 {
+					break
+				}
+			}
+			remotePublicKeyExchangeValue = remotePublicKeyExchangeValue[i:]
+			remotePublicKeyExchangeValueBig := new(big.Int).SetBytes(remotePublicKeyExchangeValue)
+			sharedKeyExchangeData = new(big.Int).Exp(remotePublicKeyExchangeValueBig, secert, factor).Bytes()
+		case message.TypeNiNr:
+			remoteNonce = ikePayload.(*message.Nonce).NonceData
+		}
+	}
+
+	ikeSecurityAssociation = &context.IKESecurityAssociation{
+		LocalSPI:               ikeInitiatorSPI,
+		RemoteSPI:              ikeMessage.ResponderSPI,
+		InitiatorMessageID:     0,
+		ResponderMessageID:     0,
+		EncryptionAlgorithm:    proposal.EncryptionAlgorithm[0],
+		IntegrityAlgorithm:     proposal.IntegrityAlgorithm[0],
+		PseudorandomFunction:   proposal.PseudorandomFunction[0],
+		DiffieHellmanGroup:     proposal.DiffieHellmanGroup[0],
+		ConcatenatedNonce:      append(localNonce, remoteNonce...),
+		DiffieHellmanSharedKey: sharedKeyExchangeData,
+		ResponderSignedOctets:  append(ikeSecurityAssociation.ResponderSignedOctets, remoteNonce...),
+	}
+
+	if err := tngfGenerateKeyForIKESA(ikeSecurityAssociation); err != nil {
+		t.Fatalf("Generate key for IKE SA failed: %+v", err)
+	}
+
+	n3ue.N3IWFIKESecurityAssociation = ikeSecurityAssociation
+
 }
 
 // func setUESecurityCapability(ue *RanUeContext) (UESecurityCapability *nasType.UESecurityCapability) {

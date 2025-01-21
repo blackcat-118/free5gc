@@ -401,78 +401,90 @@ func tngfEncryptProcedure(ikeSecurityAssociation *context.IKESecurityAssociation
 // For dealing with EAP-5G start, return EAP-5G response including
 // "AN-Parameters and NASPDU of Registration Request"
 
-// func buildEAP5GANParameters() []byte {
-// 	var anParameters []byte
+func tngfBuildEAP5GANParameters(mobileIdentity5GS nasType.MobileIdentity5GS) []byte {
+	var anParameters []byte
 
-// 	// [TS 24.502] 9.3.2.2.2.3
-// 	// AN-parameter value field in GUAMI, PLMN ID and NSSAI is coded as value part
-// 	// Therefore, IEI of AN-parameter is not needed to be included.
+	// [TS 24.502] 9.3.2.2.2.3
+	// AN-parameter value field in GUAMI, PLMN ID and NSSAI is coded as value part
+	// Therefore, IEI of AN-parameter is not needed to be included.
 
-// 	// anParameter = AN-parameter Type | AN-parameter Length | Value part of IE
+	// anParameter = AN-parameter Type | AN-parameter Length | Value part of IE
 
-// 	// Build GUAMI
-// 	anParameter := make([]byte, 2)
-// 	guami := make([]byte, 6)
-// 	guami[0] = 0x02
-// 	guami[1] = 0xf8
-// 	guami[2] = 0x39
-// 	guami[3] = 0xca
-// 	guami[4] = 0xfe
-// 	guami[5] = 0x0
-// 	anParameter[0] = message.ANParametersTypeGUAMI
-// 	anParameter[1] = byte(len(guami))
-// 	anParameter = append(anParameter, guami...)
+	// Build GUAMI
+	anParameter := make([]byte, 2)
+	guami := make([]byte, 6)
+	guami[0] = 0x02
+	guami[1] = 0xf8
+	guami[2] = 0x39
+	guami[3] = 0xca
+	guami[4] = 0xfe
+	guami[5] = 0x0
+	anParameter[0] = radiusMessage.ANParametersTypeGUAMI
+	anParameter[1] = byte(len(guami))
+	anParameter = append(anParameter, guami...)
 
-// 	anParameters = append(anParameters, anParameter...)
+	anParameters = append(anParameters, anParameter...)
 
-// 	// Build Establishment Cause
-// 	anParameter = make([]byte, 2)
-// 	establishmentCause := make([]byte, 1)
-// 	establishmentCause[0] = message.EstablishmentCauseMO_Signalling
-// 	anParameter[0] = message.ANParametersTypeEstablishmentCause
-// 	anParameter[1] = byte(len(establishmentCause))
-// 	anParameter = append(anParameter, establishmentCause...)
+	// Build Establishment Cause
+	anParameter = make([]byte, 2)
+	establishmentCause := make([]byte, 1)
+	establishmentCause[0] = radiusMessage.EstablishmentCauseMO_Signaling
+	anParameter[0] = radiusMessage.ANParametersTypeEstablishmentCause
+	anParameter[1] = byte(len(establishmentCause))
+	anParameter = append(anParameter, establishmentCause...)
 
-// 	anParameters = append(anParameters, anParameter...)
+	anParameters = append(anParameters, anParameter...)
 
-// 	// Build PLMN ID
-// 	anParameter = make([]byte, 2)
-// 	plmnID := make([]byte, 3)
-// 	plmnID[0] = 0x02
-// 	plmnID[1] = 0xf8
-// 	plmnID[2] = 0x39
-// 	anParameter[0] = message.ANParametersTypeSelectedPLMNID
-// 	anParameter[1] = byte(len(plmnID))
-// 	anParameter = append(anParameter, plmnID...)
+	// Build PLMN ID
+	anParameter = make([]byte, 2)
+	plmnID := make([]byte, 3)
+	plmnID[0] = 0x02
+	plmnID[1] = 0xf8
+	plmnID[2] = 0x39
+	anParameter[0] = radiusMessage.ANParametersTypeSelectedPLMNID
+	anParameter[1] = byte(len(plmnID))
+	anParameter = append(anParameter, plmnID...)
 
-// 	anParameters = append(anParameters, anParameter...)
+	anParameters = append(anParameters, anParameter...)
 
-// 	// Build NSSAI
-// 	anParameter = make([]byte, 2)
-// 	var nssai []byte
-// 	// s-nssai = s-nssai length(1 byte) | SST(1 byte) | SD(3 bytes)
-// 	snssai := make([]byte, 5)
-// 	snssai[0] = 4
-// 	snssai[1] = 1
-// 	snssai[2] = 0x01
-// 	snssai[3] = 0x02
-// 	snssai[4] = 0x03
-// 	nssai = append(nssai, snssai...)
-// 	snssai = make([]byte, 5)
-// 	snssai[0] = 4
-// 	snssai[1] = 1
-// 	snssai[2] = 0x11
-// 	snssai[3] = 0x22
-// 	snssai[4] = 0x33
-// 	nssai = append(nssai, snssai...)
-// 	anParameter[0] = message.ANParametersTypeRequestedNSSAI
-// 	anParameter[1] = byte(len(nssai))
-// 	anParameter = append(anParameter, nssai...)
+	// Build NSSAI
+	anParameter = make([]byte, 2)
+	var nssai []byte
+	// s-nssai = s-nssai length(1 byte) | SST(1 byte) | SD(3 bytes)
+	snssai := make([]byte, 5)
+	snssai[0] = 4
+	snssai[1] = 1
+	snssai[2] = 0x01
+	snssai[3] = 0x02
+	snssai[4] = 0x03
+	nssai = append(nssai, snssai...)
+	snssai = make([]byte, 5)
+	snssai[0] = 4
+	snssai[1] = 1
+	snssai[2] = 0x11
+	snssai[3] = 0x22
+	snssai[4] = 0x33
+	nssai = append(nssai, snssai...)
+	anParameter[0] = radiusMessage.ANParametersTypeRequestedNSSAI
+	anParameter[1] = byte(len(nssai))
+	anParameter = append(anParameter, nssai...)
 
-// 	anParameters = append(anParameters, anParameter...)
+	anParameters = append(anParameters, anParameter...)
 
-// 	return anParameters
-// }
+	// Build UE ID
+	anParameter = make([]byte, 3)
+	anParameter[0] = radiusMessage.ANParametersTypeUEIdentity
+	anParameter[1] = byte(15)
+	anParameter[2] = mobileIdentity5GS.GetIei()
+	anParameterLength := make([]byte, 2)
+	binary.BigEndian.PutUint16(anParameterLength, mobileIdentity5GS.GetLen())
+	anParameter = append(anParameter, anParameterLength...)
+	anParameter = append(anParameter, mobileIdentity5GS.Buffer...)
+
+	anParameters = append(anParameters, anParameter...)
+
+	return anParameters
+}
 
 func tngfParseIPAddressInformationToChildSecurityAssociation(
 	childSecurityAssociation *context.ChildSecurityAssociation,
@@ -1018,10 +1030,10 @@ func TestTngfUE(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Resolve UDP address %s fail: %+v", tngfInfo_IPSecIfaceAddr+":500", err)
 	}
-	ueUDPAddr, err := net.ResolveUDPAddr("udp", tngfueInfo_IPSecIfaceAddr+":48744")
-	if err != nil {
-		t.Fatalf("Resolve UDP address %s fail: %+v", tngfueInfo_IPSecIfaceAddr+":48744", err)
-	}
+	// ueUDPAddr, err := net.ResolveUDPAddr("udp", tngfueInfo_IPSecIfaceAddr+":48744")
+	// if err != nil {
+	// 	t.Fatalf("Resolve UDP address %s fail: %+v", tngfueInfo_IPSecIfaceAddr+":48744", err)
+	// }
 	udpConnection, err := setupUDPSocket()
 	radiusConnection, err := setupRadiusSocket()
 
@@ -1123,7 +1135,7 @@ func TestTngfUE(t *testing.T) {
 	eapVendorTypeData := make([]byte, 2)
 	eapVendorTypeData[0] = message.EAP5GType5GNAS
 	// AN Parameters
-	anParameters := buildEAP5GANParameters()
+	anParameters := tngfBuildEAP5GANParameters(mobileIdentity5GS)
 	anParametersLength := make([]byte, 2)
 	binary.BigEndian.PutUint16(anParametersLength, uint16(len(anParameters)))
 	eapVendorTypeData = append(eapVendorTypeData, anParametersLength...)
@@ -1275,7 +1287,7 @@ func TestTngfUE(t *testing.T) {
 	eapVendorTypeData[0] = message.EAP5GType5GNAS
 
 	// AN Parameters
-	anParameters = buildEAP5GANParameters()
+	anParameters = tngfBuildEAP5GANParameters(mobileIdentity5GS)
 	anParametersLength = make([]byte, 2)
 	binary.BigEndian.PutUint16(anParametersLength, uint16(len(anParameters)))
 	eapVendorTypeData = append(eapVendorTypeData, anParametersLength...)
@@ -1370,7 +1382,7 @@ func TestTngfUE(t *testing.T) {
 	proposal := securityAssociation.Proposals.BuildProposal(1, message.TypeESP, nil)
 	// ENCR
 	var attributeType uint16 = message.AttributeTypeKeyLength
-	var keyLength uint16 = 128
+	var keyLength uint16 = 256
 	proposal.EncryptionAlgorithm.BuildTransform(message.TypeEncryptionAlgorithm, message.ENCR_AES_CBC, &attributeType, &keyLength, nil)
 	// INTEG
 	proposal.IntegrityAlgorithm.BuildTransform(message.TypeIntegrityAlgorithm, message.AUTH_HMAC_SHA1_96, nil, nil, nil)
@@ -1461,7 +1473,89 @@ func TestTngfUE(t *testing.T) {
 		t.Fatalf("Generate key for IKE SA failed: %+v", err)
 	}
 
-	n3ue.N3IWFIKESecurityAssociation = ikeSecurityAssociation
+	tngfue.TNGFIKESecurityAssociation = ikeSecurityAssociation
+
+	// IKE_AUTH
+	ikeMessage.Payloads.Reset()
+	tngfue.TNGFIKESecurityAssociation.InitiatorMessageID++
+	ikeMessage.BuildIKEHeader(
+		tngfue.TNGFIKESecurityAssociation.LocalSPI, tngfue.TNGFIKESecurityAssociation.RemoteSPI,
+		message.IKE_AUTH, message.InitiatorBitCheck, tngfue.TNGFIKESecurityAssociation.InitiatorMessageID)
+
+	var ikePayload message.IKEPayloadContainer
+
+	// Identification
+	ikePayload.BuildIdentificationInitiator(message.ID_KEY_ID, mobileIdentity5GS.GetMobileIdentity5GSContents())
+
+	// Security Association
+	securityAssociation = ikePayload.BuildSecurityAssociation()
+	// Proposal 1
+	inboundSPI := tngfGenerateSPI(tngfue)
+	proposal = securityAssociation.Proposals.BuildProposal(1, message.TypeESP, inboundSPI)
+	// ENCR
+	proposal.EncryptionAlgorithm.BuildTransform(message.TypeEncryptionAlgorithm, message.ENCR_AES_CBC, &attributeType, &keyLength, nil)
+	// INTEG
+	proposal.IntegrityAlgorithm.BuildTransform(message.TypeIntegrityAlgorithm, message.AUTH_HMAC_SHA1_96, nil, nil, nil)
+	// ESN
+	proposal.ExtendedSequenceNumbers.BuildTransform(message.TypeExtendedSequenceNumbers, message.ESN_NO, nil, nil, nil)
+
+	// Traffic Selector
+	tsi := ikePayload.BuildTrafficSelectorInitiator()
+	tsi.TrafficSelectors.BuildIndividualTrafficSelector(message.TS_IPV4_ADDR_RANGE, 0, 0, 65535, []byte{0, 0, 0, 0}, []byte{255, 255, 255, 255})
+	tsr := ikePayload.BuildTrafficSelectorResponder()
+	tsr.TrafficSelectors.BuildIndividualTrafficSelector(message.TS_IPV4_ADDR_RANGE, 0, 0, 65535, []byte{0, 0, 0, 0}, []byte{255, 255, 255, 255})
+
+	if err := tngfEncryptProcedure(ikeSecurityAssociation, ikePayload, ikeMessage); err != nil {
+		t.Fatalf("Encrypting IKE message failed: %+v", err)
+	}
+
+	// Send to TNGF
+	ikeMessageData, err = ikeMessage.Encode()
+	if err != nil {
+		t.Fatalf("Encode IKE message failed: %+v", err)
+	}
+	if _, err := udpConnection.WriteToUDP(ikeMessageData, tngfUDPAddr); err != nil {
+		t.Fatalf("Write IKE message failed: %+v", err)
+	}
+
+	tngfue.CreateHalfChildSA(tngfue.TNGFIKESecurityAssociation.InitiatorMessageID, binary.BigEndian.Uint32(inboundSPI), -1)
+
+	// Receive TNGF reply
+	n, _, err = udpConnection.ReadFromUDP(buffer)
+	if err != nil {
+		t.Fatalf("Read IKE message failed: %+v", err)
+	}
+	ikeMessage.Payloads.Reset()
+	err = ikeMessage.Decode(buffer[:n])
+	if err != nil {
+		t.Fatalf("Decode IKE message failed: %+v", err)
+	}
+
+	encryptedPayload, ok := ikeMessage.Payloads[0].(*message.Encrypted)
+	if !ok {
+		t.Fatalf("Received payload is not an encrypted payload")
+	}
+
+	decryptedIKEPayload, err := tngfDecryptProcedure(ikeSecurityAssociation, ikeMessage, encryptedPayload)
+	if err != nil {
+		t.Fatalf("Decrypt IKE message failed: %+v", err)
+	}
+
+	// var eapIdentifier uint8
+
+	for _, ikePayload := range decryptedIKEPayload {
+		switch ikePayload.Type() {
+		case message.TypeIDr:
+			t.Log("Get IDr")
+		case message.TypeAUTH:
+			t.Log("Get AUTH")
+		case message.TypeCERT:
+			t.Log("Get CERT")
+		case message.TypeEAP:
+			// eapIdentifier = ikePayload.(*message.EAP).Identifier
+			t.Log("Get EAP")
+		}
+	}
 
 }
 

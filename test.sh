@@ -89,7 +89,7 @@ function terminate()
     sudo ip netns del ${UPFNS}
     sudo ip addr del 10.60.0.1/32 dev lo
 
-    if [[ "$1" == "TestNon3GPP" ]]
+    if [[ "$1" == "TestNon3GPP"  || "$1" == "TestTngf" ]]
     then
         if [ ${DUMP_NS} ]
         then
@@ -100,7 +100,7 @@ function terminate()
         sudo ip netns del ${UENS}
         removeN3iwfInterfaces
         sudo ip link del veth2
-        sudo killall n3iwf
+        sudo killall n3iwf tngf
         ps aux | grep test.test | awk '{print $2}' | xargs sudo kill -SIGUSR1
     fi
 

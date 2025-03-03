@@ -273,54 +273,6 @@ func tngfGenerateKeyForIKESA(ikeSecurityAssociation *context.IKESecurityAssociat
 	return nil
 }
 
-func tngfGenerateKeyForChildSA(ikeSecurityAssociation *context.IKESecurityAssociation, childSecurityAssociation *context.ChildSecurityAssociation) error {
-	// Transforms
-	transformPseudorandomFunction := ikeSecurityAssociation.PseudorandomFunction
-	var transformIntegrityAlgorithmForIPSec *message.Transform
-	if len(ikeSecurityAssociation.IKEAuthResponseSA.Proposals[0].IntegrityAlgorithm) != 0 {
-		transformIntegrityAlgorithmForIPSec = ikeSecurityAssociation.IKEAuthResponseSA.Proposals[0].IntegrityAlgorithm[0]
-	}
-
-	// Get key length for encryption and integrity key for IPSec
-	var lengthEncryptionKeyIPSec, lengthIntegrityKeyIPSec, totalKeyLength int
-	var ok bool
-
-	lengthEncryptionKeyIPSec = 32
-	if transformIntegrityAlgorithmForIPSec != nil {
-		lengthIntegrityKeyIPSec = 20
-	}
-	totalKeyLength = lengthEncryptionKeyIPSec + lengthIntegrityKeyIPSec
-	totalKeyLength = totalKeyLength * 2
-
-	// Generate key for child security association as specified in RFC 7296 section 2.17
-	seed := ikeSecurityAssociation.ConcatenatedNonce
-	var pseudorandomFunction hash.Hash
-
-	var keyStream, generatedKeyBlock []byte
-	var index byte
-	for index = 1; len(keyStream) < totalKeyLength; index++ {
-		if pseudorandomFunction, ok = handler.NewPseudorandomFunction(ikeSecurityAssociation.SK_d, transformPseudorandomFunction.TransformID); !ok {
-			return errors.New("New pseudorandom function failed")
-		}
-		if _, err := pseudorandomFunction.Write(append(append(generatedKeyBlock, seed...), index)); err != nil {
-			return errors.New("Pseudorandom function write failed")
-		}
-		generatedKeyBlock = pseudorandomFunction.Sum(nil)
-		keyStream = append(keyStream, generatedKeyBlock...)
-	}
-
-	childSecurityAssociation.InitiatorToResponderEncryptionKey = append(childSecurityAssociation.InitiatorToResponderEncryptionKey, keyStream[:lengthEncryptionKeyIPSec]...)
-	keyStream = keyStream[lengthEncryptionKeyIPSec:]
-	childSecurityAssociation.InitiatorToResponderIntegrityKey = append(childSecurityAssociation.InitiatorToResponderIntegrityKey, keyStream[:lengthIntegrityKeyIPSec]...)
-	keyStream = keyStream[lengthIntegrityKeyIPSec:]
-	childSecurityAssociation.ResponderToInitiatorEncryptionKey = append(childSecurityAssociation.ResponderToInitiatorEncryptionKey, keyStream[:lengthEncryptionKeyIPSec]...)
-	keyStream = keyStream[lengthEncryptionKeyIPSec:]
-	childSecurityAssociation.ResponderToInitiatorIntegrityKey = append(childSecurityAssociation.ResponderToInitiatorIntegrityKey, keyStream[:lengthIntegrityKeyIPSec]...)
-
-	return nil
-
-}
-
 func tngfDecryptProcedure(ikeSecurityAssociation *context.IKESecurityAssociation, ikeMessage *message.IKEMessage, encryptedPayload *message.Encrypted) (message.IKEPayloadContainer, error) {
 	// Load needed information
 	transformIntegrityAlgorithm := ikeSecurityAssociation.IntegrityAlgorithm
@@ -556,8 +508,8 @@ func tngfApplyXFRMRule(ue_is_initiator bool, ifId uint32, childSecurityAssociati
 	var xfrmEncryptionAlgorithm, xfrmIntegrityAlgorithm *netlink.XfrmStateAlgo
 	if ue_is_initiator {
 		xfrmEncryptionAlgorithm = &netlink.XfrmStateAlgo{
-			Name: xfrm.XFRMEncryptionAlgorithmType(childSecurityAssociation.EncryptionAlgorithm).String(),
-			Key:  childSecurityAssociation.ResponderToInitiatorEncryptionKey,
+			Name: "ecb(cipher_null)",
+			Key:  nil,
 		}
 		if childSecurityAssociation.IntegrityAlgorithm != 0 {
 			xfrmIntegrityAlgorithm = &netlink.XfrmStateAlgo{
@@ -567,8 +519,8 @@ func tngfApplyXFRMRule(ue_is_initiator bool, ifId uint32, childSecurityAssociati
 		}
 	} else {
 		xfrmEncryptionAlgorithm = &netlink.XfrmStateAlgo{
-			Name: xfrm.XFRMEncryptionAlgorithmType(childSecurityAssociation.EncryptionAlgorithm).String(),
-			Key:  childSecurityAssociation.InitiatorToResponderEncryptionKey,
+			Name: "ecb(cipher_null)",
+			Key:  nil,
 		}
 		if childSecurityAssociation.IntegrityAlgorithm != 0 {
 			xfrmIntegrityAlgorithm = &netlink.XfrmStateAlgo{
@@ -628,12 +580,12 @@ func tngfApplyXFRMRule(ue_is_initiator bool, ifId uint32, childSecurityAssociati
 	// Direction: UE -> TNGF
 	// State
 	if ue_is_initiator {
-		xfrmEncryptionAlgorithm.Key = childSecurityAssociation.InitiatorToResponderEncryptionKey
+		xfrmEncryptionAlgorithm.Key = nil
 		if childSecurityAssociation.IntegrityAlgorithm != 0 {
 			xfrmIntegrityAlgorithm.Key = childSecurityAssociation.InitiatorToResponderIntegrityKey
 		}
 	} else {
-		xfrmEncryptionAlgorithm.Key = childSecurityAssociation.ResponderToInitiatorEncryptionKey
+		xfrmEncryptionAlgorithm.Key = nil
 		if childSecurityAssociation.IntegrityAlgorithm != 0 {
 			xfrmIntegrityAlgorithm.Key = childSecurityAssociation.ResponderToInitiatorIntegrityKey
 		}
@@ -834,7 +786,7 @@ func tngfSendPduSessionEstablishmentRequest(
 	// Select GRE traffic
 	childSecurityAssociationContextUserPlane.SelectedIPProtocol = unix.IPPROTO_GRE
 
-	if err := tngfGenerateKeyForChildSA(ikeSA, childSecurityAssociationContextUserPlane); err != nil {
+	if err := handler.GenerateKeyForChildSA(ikeSA, childSecurityAssociationContextUserPlane); err != nil {
 		return ifaces, fmt.Errorf("Generate key for child SA failed: %+v", err)
 	}
 
@@ -1497,7 +1449,7 @@ func TestTngfUE(t *testing.T) {
 	inboundSPI := tngfGenerateSPI(tngfue)
 	proposal = securityAssociation.Proposals.BuildProposal(1, message.TypeESP, inboundSPI)
 	// ENCR
-	proposal.EncryptionAlgorithm.BuildTransform(message.TypeEncryptionAlgorithm, message.ENCR_AES_CBC, &attributeType, &keyLength, nil)
+	proposal.EncryptionAlgorithm.BuildTransform(message.TypeEncryptionAlgorithm, message.ENCR_NULL, &attributeType, &keyLength, nil)
 	// INTEG
 	proposal.IntegrityAlgorithm.BuildTransform(message.TypeIntegrityAlgorithm, message.AUTH_HMAC_SHA1_96, nil, nil, nil)
 	// ESN
@@ -1672,7 +1624,7 @@ func TestTngfUE(t *testing.T) {
 	// Select TCP traffic
 	childSecurityAssociationContext.SelectedIPProtocol = unix.IPPROTO_TCP
 
-	if err := tngfGenerateKeyForChildSA(ikeSecurityAssociation, childSecurityAssociationContext); err != nil {
+	if err := handler.GenerateKeyForChildSA(ikeSecurityAssociation, childSecurityAssociationContext); err != nil {
 		t.Fatalf("Generate key for child SA failed: %+v", err)
 	}
 
@@ -1877,7 +1829,7 @@ func TestTngfUE(t *testing.T) {
 	// Select GRE traffic
 	childSecurityAssociationContextUserPlane.SelectedIPProtocol = unix.IPPROTO_GRE
 
-	if err := tngfGenerateKeyForChildSA(ikeSecurityAssociation, childSecurityAssociationContextUserPlane); err != nil {
+	if err := handler.GenerateKeyForChildSA(ikeSecurityAssociation, childSecurityAssociationContextUserPlane); err != nil {
 		t.Fatalf("Generate key for child SA failed: %+v", err)
 	}
 

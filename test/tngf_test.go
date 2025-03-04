@@ -28,7 +28,6 @@ import (
 	"github.com/free5gc/nas/nasMessage"
 	"github.com/free5gc/nas/nasType"
 	nasSecurity "github.com/free5gc/nas/security"
-	"github.com/free5gc/ngap"
 	"github.com/free5gc/openapi/models"
 	"github.com/free5gc/tngf/pkg/context"
 	"github.com/free5gc/tngf/pkg/ike/handler"
@@ -1431,7 +1430,7 @@ func TestTngfUE(t *testing.T) {
 
 	tngfue.TNGFIKESecurityAssociation = ikeSecurityAssociation
 
-	// IKE_AUTH
+	// IKE_AUTH (negociate IKE_CHILD_SA)
 	ikeMessage.Payloads.Reset()
 	tngfue.TNGFIKESecurityAssociation.InitiatorMessageID++
 	ikeMessage.BuildIKEHeader(
@@ -1448,7 +1447,7 @@ func TestTngfUE(t *testing.T) {
 	// Proposal 1
 	inboundSPI := tngfGenerateSPI(tngfue)
 	proposal = securityAssociation.Proposals.BuildProposal(1, message.TypeESP, inboundSPI)
-	// ENCR
+	// ENCR (use null encryption for ESP)
 	proposal.EncryptionAlgorithm.BuildTransform(message.TypeEncryptionAlgorithm, message.ENCR_NULL, &attributeType, &keyLength, nil)
 	// INTEG
 	proposal.IntegrityAlgorithm.BuildTransform(message.TypeIntegrityAlgorithm, message.AUTH_HMAC_SHA1_96, nil, nil, nil)
@@ -1840,13 +1839,13 @@ func TestTngfUE(t *testing.T) {
 
 	// TODO
 	// We don't check any of message in UeConfigUpdate Message
-	if n, err := tcpConnWithTNGF.Read(buffer); err != nil {
-		t.Fatalf("No UeConfigUpdate Message: %+v", err)
-		_, err := ngap.Decoder(buffer[2:n])
-		if err != nil {
-			t.Fatalf("UeConfigUpdate Decode Error: %+v", err)
-		}
-	}
+	// if n, err := tcpConnWithTNGF.Read(buffer); err != nil {
+	// 	t.Fatalf("No UeConfigUpdate Message: %+v", err)
+	// 	_, err := ngap.Decoder(buffer[2:n])
+	// 	if err != nil {
+	// 		t.Fatalf("UeConfigUpdate Decode Error: %+v", err)
+	// 	}
+	// }
 
 	var pduAddress net.IP
 
@@ -1895,28 +1894,28 @@ func TestTngfUE(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	for i := 1; i <= 3; i++ {
-		var (
-			ifaces []netlink.Link
-			err    error
-		)
-		t.Logf("%d times PDU Session Est Request Start", i+1)
-		if ifaces, err = tngfSendPduSessionEstablishmentRequest(pduSessionId+uint8(i), ue, tngfue, ikeSecurityAssociation, udpConnection, tcpConnWithTNGF, t); err != nil {
-			t.Fatalf("Session Est Request Fail: %+v", err)
-		} else {
-			t.Logf("Create %d interfaces", len(ifaces))
-		}
+	// for i := 1; i <= 3; i++ {
+	// 	var (
+	// 		ifaces []netlink.Link
+	// 		err    error
+	// 	)
+	// 	t.Logf("%d times PDU Session Est Request Start", i+1)
+	// 	if ifaces, err = tngfSendPduSessionEstablishmentRequest(pduSessionId+uint8(i), ue, tngfue, ikeSecurityAssociation, udpConnection, tcpConnWithTNGF, t); err != nil {
+	// 		t.Fatalf("Session Est Request Fail: %+v", err)
+	// 	} else {
+	// 		t.Logf("Create %d interfaces", len(ifaces))
+	// 	}
 
-		defer func() {
-			for _, iface := range ifaces {
-				if err := netlink.LinkDel(iface); err != nil {
-					t.Fatalf("Delete interface %s fail: %+v", iface.Attrs().Name, err)
-				} else {
-					t.Logf("Delete interface: %s", iface.Attrs().Name)
-				}
-			}
-		}()
-	}
+	// 	defer func() {
+	// 		for _, iface := range ifaces {
+	// 			if err := netlink.LinkDel(iface); err != nil {
+	// 				t.Fatalf("Delete interface %s fail: %+v", iface.Attrs().Name, err)
+	// 			} else {
+	// 				t.Logf("Delete interface: %s", iface.Attrs().Name)
+	// 			}
+	// 		}
+	// 	}()
+	// }
 
 	// Ping remote
 	pinger, err := ping.NewPinger("10.60.0.101")

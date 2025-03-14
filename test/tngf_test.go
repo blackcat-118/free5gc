@@ -107,84 +107,6 @@ func tngfSetupIPsecXfrmi(xfrmIfaceName, parentIfaceName string, xfrmIfaceId uint
 	return xfrmi, nil
 }
 
-// func setupGreTunnel(greIfaceName, parentIfaceName string, ueTunnelAddr, tngfTunnelAddr, pduAddr net.IP, qoSInfo *PDUQoSInfo, t *testing.T) (netlink.Link, error) {
-// 	var (
-// 		parent      netlink.Link
-// 		greKeyField uint32
-// 		err         error
-// 	)
-
-// 	if qoSInfo != nil {
-// 		greKeyField |= (uint32(qoSInfo.qfiList[0]) & 0x3F) << 24
-// 	}
-
-// 	if parent, err = netlink.LinkByName(parentIfaceName); err != nil {
-// 		return nil, err
-// 	}
-
-// 	// New GRE tunnel interface
-// 	newGRETunnel := &netlink.Gretun{
-// 		LinkAttrs: netlink.LinkAttrs{
-// 			Name: greIfaceName,
-// 			MTU:  1438, // remain for endpoint IP header(most 40 bytes if IPv6) and ESP header (22 bytes)
-// 		},
-// 		Link:   uint32(parent.Attrs().Index), // PHYS_DEV in iproute2; IFLA_GRE_LINK in linux kernel
-// 		Local:  ueTunnelAddr,
-// 		Remote: tngfTunnelAddr,
-// 		IKey:   greKeyField,
-// 		OKey:   greKeyField,
-// 	}
-
-// 	t.Logf("GRE Key Field: 0x%x", greKeyField)
-
-// 	if err := netlink.LinkAdd(newGRETunnel); err != nil {
-// 		return nil, err
-// 	}
-
-// 	// Get link info
-// 	linkGRE, err := netlink.LinkByName(greIfaceName)
-// 	if err != nil {
-// 		return nil, fmt.Errorf("No link named %s", greIfaceName)
-// 	}
-
-// 	linkGREAddr := &netlink.Addr{
-// 		IPNet: &net.IPNet{
-// 			IP:   pduAddr,
-// 			Mask: net.IPv4Mask(255, 255, 255, 255),
-// 		},
-// 	}
-
-// 	if err := netlink.AddrAdd(linkGRE, linkGREAddr); err != nil {
-// 		return nil, err
-// 	}
-
-// 	// Set GRE interface up
-// 	if err := netlink.LinkSetUp(linkGRE); err != nil {
-// 		return nil, err
-// 	}
-
-// 	return linkGRE, nil
-// }
-
-// func getAuthSubscription() (authSubs models.AuthenticationSubscription) {
-// 	authSubs.PermanentKey = &models.PermanentKey{
-// 		PermanentKeyValue: TestGenAuthData.MilenageTestSet19.K,
-// 	}
-// 	authSubs.Opc = &models.Opc{
-// 		OpcValue: TestGenAuthData.MilenageTestSet19.OPC,
-// 	}
-// 	authSubs.Milenage = &models.Milenage{
-// 		Op: &models.Op{
-// 			OpValue: TestGenAuthData.MilenageTestSet19.OP,
-// 		},
-// 	}
-// 	authSubs.AuthenticationManagementField = "8000"
-
-// 	authSubs.SequenceNumber = TestGenAuthData.MilenageTestSet19.SQN
-// 	authSubs.AuthenticationMethod = models.AuthMethod__5_G_AKA
-// 	return
-// }
-
 func setupRadiusSocket() (*net.UDPConn, error) {
 	bindAddr := tngfueInfo_IPSecIfaceAddr + ":48744"
 	udpAddr, err := net.ResolveUDPAddr("udp", bindAddr)
@@ -197,17 +119,6 @@ func setupRadiusSocket() (*net.UDPConn, error) {
 	}
 	return udpListener, nil
 }
-
-// func concatenateNonceAndSPI(nonce []byte, SPI_initiator uint64, SPI_responder uint64) []byte {
-// 	spi := make([]byte, 8)
-
-// 	binary.BigEndian.PutUint64(spi, SPI_initiator)
-// 	newSlice := append(nonce, spi...)
-// 	binary.BigEndian.PutUint64(spi, SPI_responder)
-// 	newSlice = append(newSlice, spi...)
-
-// 	return newSlice
-// }
 
 func tngfGenerateKeyForIKESA(ikeSecurityAssociation *context.IKESecurityAssociation) error {
 	// Transforms
@@ -463,14 +374,6 @@ func tngfParseIPAddressInformationToChildSecurityAssociation(
 
 	return nil
 }
-
-// type PDUQoSInfo struct {
-// 	pduSessionID    uint8
-// 	qfiList         []uint8
-// 	isDefault       bool
-// 	isDSCPSpecified bool
-// 	DSCP            uint8
-// }
 
 func tngfParse5GQoSInfoNotify(n *message.Notification) (info *PDUQoSInfo, err error) {
 	info = new(PDUQoSInfo)
@@ -983,10 +886,7 @@ func TestTngfUE(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Resolve UDP address %s fail: %+v", tngfInfo_IPSecIfaceAddr+":500", err)
 	}
-	// ueUDPAddr, err := net.ResolveUDPAddr("udp", tngfueInfo_IPSecIfaceAddr+":48744")
-	// if err != nil {
-	// 	t.Fatalf("Resolve UDP address %s fail: %+v", tngfueInfo_IPSecIfaceAddr+":48744", err)
-	// }
+
 	udpConnection, err := setupUDPSocket()
 	radiusConnection, err := setupRadiusSocket()
 
@@ -1056,7 +956,6 @@ func TestTngfUE(t *testing.T) {
 	if _, err := radiusConnection.WriteToUDP(pkt, tngfRadiusUDPAddr); err != nil {
 		t.Fatalf("Write Radius maessage fail: %+v", err)
 	}
-	// radiusHandler.SendRadiusMessageToUE(radiusConnection, ueUDPAddr, tngfRadiusUDPAddr, ueRadiusMessage)
 
 	// Step 4: receive TNGF reply
 	buffer := make([]byte, 65535)
@@ -1837,16 +1736,6 @@ func TestTngfUE(t *testing.T) {
 		t.Fatalf("Applying XFRM rules failed: %+v", err)
 	}
 
-	// TODO
-	// We don't check any of message in UeConfigUpdate Message
-	// if n, err := tcpConnWithTNGF.Read(buffer); err != nil {
-	// 	t.Fatalf("No UeConfigUpdate Message: %+v", err)
-	// 	_, err := ngap.Decoder(buffer[2:n])
-	// 	if err != nil {
-	// 		t.Fatalf("UeConfigUpdate Decode Error: %+v", err)
-	// 	}
-	// }
-
 	var pduAddress net.IP
 
 	// Read NAS from TNGF
@@ -1894,29 +1783,6 @@ func TestTngfUE(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	// for i := 1; i <= 3; i++ {
-	// 	var (
-	// 		ifaces []netlink.Link
-	// 		err    error
-	// 	)
-	// 	t.Logf("%d times PDU Session Est Request Start", i+1)
-	// 	if ifaces, err = tngfSendPduSessionEstablishmentRequest(pduSessionId+uint8(i), ue, tngfue, ikeSecurityAssociation, udpConnection, tcpConnWithTNGF, t); err != nil {
-	// 		t.Fatalf("Session Est Request Fail: %+v", err)
-	// 	} else {
-	// 		t.Logf("Create %d interfaces", len(ifaces))
-	// 	}
-
-	// 	defer func() {
-	// 		for _, iface := range ifaces {
-	// 			if err := netlink.LinkDel(iface); err != nil {
-	// 				t.Fatalf("Delete interface %s fail: %+v", iface.Attrs().Name, err)
-	// 			} else {
-	// 				t.Logf("Delete interface: %s", iface.Attrs().Name)
-	// 			}
-	// 		}
-	// 	}()
-	// }
-
 	// Ping remote
 	pinger, err := ping.NewPinger("10.60.0.101")
 	if err != nil {
@@ -1955,34 +1821,3 @@ func TestTngfUE(t *testing.T) {
 		return
 	}
 }
-
-// func setUESecurityCapability(ue *RanUeContext) (UESecurityCapability *nasType.UESecurityCapability) {
-// 	UESecurityCapability = &nasType.UESecurityCapability{
-// 		Iei:    nasMessage.RegistrationRequestUESecurityCapabilityType,
-// 		Len:    8,
-// 		Buffer: []uint8{0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00},
-// 	}
-// 	switch ue.CipheringAlg {
-// 	case security.AlgCiphering128NEA0:
-// 		UESecurityCapability.SetEA0_5G(1)
-// 	case security.AlgCiphering128NEA1:
-// 		UESecurityCapability.SetEA1_128_5G(1)
-// 	case security.AlgCiphering128NEA2:
-// 		UESecurityCapability.SetEA2_128_5G(1)
-// 	case security.AlgCiphering128NEA3:
-// 		UESecurityCapability.SetEA3_128_5G(1)
-// 	}
-
-// 	switch ue.IntegrityAlg {
-// 	case security.AlgIntegrity128NIA0:
-// 		UESecurityCapability.SetIA0_5G(1)
-// 	case security.AlgIntegrity128NIA1:
-// 		UESecurityCapability.SetIA1_128_5G(1)
-// 	case security.AlgIntegrity128NIA2:
-// 		UESecurityCapability.SetIA2_128_5G(1)
-// 	case security.AlgIntegrity128NIA3:
-// 		UESecurityCapability.SetIA3_128_5G(1)
-// 	}
-
-// 	return
-// }
